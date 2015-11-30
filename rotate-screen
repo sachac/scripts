@@ -1,0 +1,33 @@
+#!/bin/bash
+
+# Find the line in "xrandr -q --verbose" output that contains current screen orientation and "strip" out current orientation.
+
+rotation="$(xrandr -q --verbose | grep 'connected' | egrep -o  '\) (normal|left|inverted|right) \(' | egrep -o '(normal|left|inverted|right)')"
+
+# left, right, inverted, normal
+function rotateTo {
+    # rotate to the left
+    xrandr -o $1
+    case "$1" in
+        left) direction=ccw ;;
+        inverted) direction=half ;;
+        right) direction=cw ;;
+        normal) direction=none ;;
+    esac
+    xsetwacom set 11 rotate $direction
+    xsetwacom set 17 rotate $direction
+    xsetwacom set 12 rotate $direction
+}
+
+if [ -z "$1" ]; then
+    # Using current screen orientation proceed to rotate screen and input devices.
+    case "$rotation" in
+        # Changed this to just toggle between landscape orientations
+        normal) rotateTo inverted ;;
+        inverted) rotateTo normal ;;
+        left) rotateTo inverted ;;
+        right) rotateTo normal ;;
+    esac
+else
+    rotateTo $1
+fi

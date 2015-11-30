@@ -1,0 +1,6 @@
+SERVER=sacha@direct.sachachua.com
+ssh $SERVER ~/bin/backup-each-db
+rsync -avzue ssh $SERVER:~/backups/ ~/backups/server/db/
+rsync -avzue ssh $SERVER:/var/www/ ~/backups/server/www/ --exclude=cache --exclude=bower_components --exclude=node_modules
+rsync -avzue ssh $SERVER:/var/git/ ~/backups/server/git/
+rsync -avzue ssh $SERVER:/home/sacha/ ~/backups/server/home/ --exclude=backups --exclude=.gem --exclude=node_modules --exclude=bower_components --exclude=.npm --exclude=.cpan --exclude=.gnupg

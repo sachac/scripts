@@ -1,0 +1,6 @@
+#!/bin/bash
+
+DESTINATION=/media/sacha/My\ Passport
+rsync -avu -FF --chmod u+rwx ~/ "$DESTINATION/sacha/" --exclude=Clips --exclude=Documents/Adphoto --exclude=node_modules --exclude=bower_components --exclude=tmp --exclude=elpa --exclude=.node-gyp --exclude=.vagrant.d --exclude=.thumbnails --exclude=.yaoddmuse --exclude=Downloads/ --exclude=R/ --exclude=code/emacswiki.org --exclude=AppData --exclude="Documents/Calibre Library"  --exclude="VirtualBox VMs" --prune-empty-dirs
+
+
