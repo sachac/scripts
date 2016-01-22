@@ -32,7 +32,8 @@ getSketchesByTags = (sketches, tags) ->
   for filename in sketches
     match = true
     for tag in tags
-      if !filename.match tag
+      regex = new RegExp('#' + tag + '[ \.]')
+      if !filename.match regex
         match = false
         break
     if match
@@ -60,21 +61,31 @@ getWeeklySketchesForMonth = (year, month) ->
 ################################################################################
 # Request handlers
 
+links = """
+<div class="links"><a href="/random">Random</a> - <a href="/date/2015">2015</a> - <a href="/date/2016">2016</a> - <a href="/tag">Tags by freq</a> -
+<a href="/tag?sort=alpha">Tags by alpha</a> - <a href="/journal">Journal</a></div>
+"""
 header = """
+<style type="text/css">body { font-family: Arial, sans-serif; }
+ul li { margin-bottom: 0.5em }
+.links { font-size: large; margin-top: 1em; margin-bottom: 1em; clear: both }</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
   <script src="https://npmcdn.com/imagesloaded@4.1/imagesloaded.pkgd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/masonry/4.0.0/masonry.pkgd.min.js"></script>
-<a href="/random">Random</a> - <a href="/tag/monthly">Monthly</a><br />
-         """
-footer = """
-<a href="/random">Random</a> - <a href="/tag/monthly">Monthly</a><br />
-  <script>$('.grid').imagesLoaded(function() { $('.grid').masonry({itemSelector: '.grid-item'}); })</script>
-"""
+  """ + links 
+footer = links
+masonry = "<script>$('.grid').imagesLoaded(function() { $('.grid').masonry({itemSelector: '.grid-item'}); })</script>"
 
 linkTags = (filename) ->
-  return filename.replace(/#([-a-zA-Z]+)/g, (x, tag) ->
+  filename = filename.replace(/#([-a-zA-Z]+)/g, (x, tag) ->
     return '<a href="/tag/' + tag + '">' + x + '</a>'
   )
+  filename = filename.replace(/ref .*/, (x) ->
+    return x.replace(/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][a-z]?/, (y) ->
+      return '<a href="/id/' + y + '">' + y + '</a>'
+    )
+  )
+  return filename
     
 linkToImage = (filename, optionalURL) ->
   url = '/image/' + encodeURIComponent(filename)
@@ -92,7 +103,25 @@ serveRandomImage = (req, res) ->
     res.header "Cache-Control", "no-cache, no-store, must-revalidate"
     res.header "Pragma", "no-cache"
     res.header "Expires", 0
-    res.send header + formatList(list) + footer
+    res.send header + formatList(list) + footer + masonry
+
+showTextList = (req, res, filter) ->
+  getSketches(SKETCH_DIR).then (sketches) ->
+    list = sketches.filter(filter)
+    res.send header + '<ul>' + list.map((filename) ->
+      url = '/image/' + encodeURIComponent(filename)
+      return '<li><a href="' + url + '">View</a> - ' + linkTags(filename) + '</li>'
+    ).join('') + '</ul>' + footer
+  
+listNonjournalSketches = (req, res) ->
+  showTextList(req, res, (s) ->
+    return !s.match(/#journal/) && s.match(/^[0-9]/)
+  )
+    
+listJournalSketches = (req, res) ->
+  showTextList(req, res, (s) ->
+    return s.match(/#journal|#monthly|#yearly/)
+  )
 
 serveImageByID = (req, res) ->
   getSketches(SKETCH_DIR).then (sketches) ->
@@ -104,9 +133,41 @@ serveImageByName = (req, res) ->
   res.sendFile filename
 
 formatList = (list, urlFunc, size) ->
-  return '<style type="text/css">.grid-item { width: ' + (size || '50%') + ' }</style><div class="grid">' + (list.map((s) ->
-    return linkToImage(s, (if urlFunc then urlFunc(s) else null), size)
+  size ||= '50%'
+  return '<style type="text/css">.grid-item { width: ' + size + '; float: left; margin-bottom: 1em }</style><div class="grid">' + (list.map((s, index) ->
+    html = linkToImage(s, (if urlFunc then urlFunc(s) else null), size)
+    if ((size == "33%" && index % 3 == 2) || (size == "50%" && index % 2 == 1))
+      html += '<br clear="both" />'
+    return html
   ).join '') + '</div>'
+
+countTags = (sketches) ->
+  tags = {}
+  regexp = /#([-a-zA-Z]+)/g
+  sketches.map (s) ->
+    while true
+      m = regexp.exec(s)
+      if !m then break
+      tags[m[1]] ||= 0
+      tags[m[1]]++
+  list = ([key, val] for own key, val of tags)
+  return list.sort (a, b) ->
+    return b[1] - a[1]
+    
+serveTagList = (req, res) ->
+  getSketches(SKETCH_DIR).then (sketches) ->
+    nonJournal = sketches.filter((s) ->
+      return !s.match(/#journal/)
+    )
+    tags = countTags(nonJournal)
+    if req.query.sort == 'alpha'
+      tags = tags.sort (a, b) ->
+        return -1 if a[0] < b[0]
+        return 1 if a[0] > b[0]
+        return 0
+    res.send header + '<ul>' + tags.map((tagInfo) ->
+      return '<li><a href="/tag/' + tagInfo[0] + '">' + tagInfo[0] + ' (' + tagInfo[1] + ')</a></li>'
+    ).join('') + '</ul>' + footer
   
 serveImagesByTag = (req, res) ->
   tag = req.params.tag.split(/,/g)
@@ -133,8 +194,7 @@ serveImagesByDate = (req, res) ->
               return base + '/' + (i + 1)
     list = getSketchesByRegexp(sketches, regexp).reverse()
     res.send header + formatList(list, urlFunc, '33%') + footer
-      
-  
+        
 ################################################################################
 # Express
 
@@ -143,8 +203,11 @@ app = express()
 app.get '/random', serveRandomImage
 app.get '/id/:id', serveImageByID
 app.get '/image/:filename', serveImageByName
+app.get '/tag', serveTagList
 app.get '/tag/:tag', serveImagesByTag
 app.get '/date/:year/:month?', serveImagesByDate
+app.get '/nonjournal', listNonjournalSketches
+app.get '/journal', listJournalSketches
 
 app.listen process.env.PORT || 3000, () ->
   console.log "Listening on " + (process.env.PORT || 3000)
