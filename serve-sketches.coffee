@@ -4,7 +4,12 @@ SKETCH_DIR = '/home/sacha/sketches'
 fs = require 'fs'
 path = require 'path'
 q = require 'q'
+auth = require 'http-auth'
+secret = require '/home/sacha/.secret.js'
 
+basic = auth.basic({realm: "Sketches"}, (username, password, callback) ->
+  callback(username == secret.auth.user && password == secret.auth.password)
+)
 ################################################################################
 # Utility functions
 getSketches = (dir) ->
@@ -18,9 +23,7 @@ getRandomSketch = (sketches) ->
   return sketches[index]
 
 getSketchByID = (sketches, id) ->
-  console.log id
   regexp = new RegExp('^' + id)
-  console.log regexp
   if !id.match(/^[0-9]+/)
     return null
   for filename in sketches
@@ -63,7 +66,7 @@ getWeeklySketchesForMonth = (year, month) ->
 
 links = """
 <div class="links"><a href="/random">Random</a> - <a href="/date/2015">2015</a> - <a href="/date/2016">2016</a> - <a href="/tag">Tags by freq</a> -
-<a href="/tag?sort=alpha">Tags by alpha</a> - <a href="/journal">Journal</a></div>
+<a href="/tag?sort=alpha">Tags by alpha</a> - <a href="/nonjournal">Nonjournal</a> - <a href="/journal">Journal</a></div>
 """
 header = """
 <style type="text/css">body { font-family: Arial, sans-serif; }
@@ -72,6 +75,14 @@ ul li { margin-bottom: 0.5em }
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
   <script src="https://npmcdn.com/imagesloaded@4.1/imagesloaded.pkgd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/masonry/4.0.0/masonry.pkgd.min.js"></script>
+  <script>
+    $(document).ready(function() {
+      $('.followup').click(function() {
+        filename = $(this).closest('.grid-item').attr('data-filename');
+        $.ajax({method: 'POST', url: '/followup/' + encodeURIComponent(filename)});
+      });
+    });
+  </script>
   """ + links 
 footer = links
 masonry = "<script>$('.grid').imagesLoaded(function() { $('.grid').masonry({itemSelector: '.grid-item'}); })</script>"
@@ -89,8 +100,8 @@ linkTags = (filename) ->
     
 linkToImage = (filename, optionalURL) ->
   url = '/image/' + encodeURIComponent(filename)
-  s = '<div class="grid-item"><a href="' + (optionalURL || url) + '"><img src="' + url + '" width="100%"></a>'
-  s += '<br />' + linkTags(filename) + '</div>'
+  s = '<div class="grid-item" data-filename="' + filename + '"><a href="' + (optionalURL || url) + '"><img src="' + url + '" width="100%"></a>'
+  s += '<br />' + linkTags(filename) + '<br /><a href="#" class="followup">Follow up</a></div>'
   return s
   
 serveRandomImage = (req, res) ->
@@ -168,6 +179,12 @@ serveTagList = (req, res) ->
     res.send header + '<ul>' + tags.map((tagInfo) ->
       return '<li><a href="/tag/' + tagInfo[0] + '">' + tagInfo[0] + ' (' + tagInfo[1] + ')</a></li>'
     ).join('') + '</ul>' + footer
+
+followUp = (req, res) ->
+  filename = req.params.filename.replace(/["'\\]/, '') # a little bit of cleaning; probably should require auth
+  command = 'emacsclient --eval \'(my/follow-up-on-sketch "' + filename + '")\''
+  require('child_process').exec(command)
+  res.status(200)
   
 serveImagesByTag = (req, res) ->
   tag = req.params.tag.split(/,/g)
@@ -175,6 +192,14 @@ serveImagesByTag = (req, res) ->
   getSketches(SKETCH_DIR).then (sketches) ->
     q(getSketchesByTags(sketches, tag)).then (list) ->
       res.send header + formatList(list) + footer
+
+showSketchesByRange = (req, res) ->
+  start = req.query.start
+  end = req.query.end
+  getSketches(SKETCH_DIR).then (sketches) ->
+    inRange = sketches.filter (x) ->
+      return x >= start && (!end || x <= end)
+    res.send header + formatList(inRange) + footer
 
 serveImagesByDate = (req, res) ->
   getSketches(SKETCH_DIR).then (sketches) ->
@@ -200,6 +225,7 @@ serveImagesByDate = (req, res) ->
 
 express = require 'express'
 app = express()
+app.use '/followup/:filename', auth.connect(basic)   # Uncomment to auth for everything
 app.get '/random', serveRandomImage
 app.get '/id/:id', serveImageByID
 app.get '/image/:filename', serveImageByName
@@ -208,6 +234,8 @@ app.get '/tag/:tag', serveImagesByTag
 app.get '/date/:year/:month?', serveImagesByDate
 app.get '/nonjournal', listNonjournalSketches
 app.get '/journal', listJournalSketches
-
+app.get '/range', showSketchesByRange
+app.get '/', serveRandomImage
+app.post '/followup/:filename', followUp
 app.listen process.env.PORT || 3000, () ->
   console.log "Listening on " + (process.env.PORT || 3000)
