@@ -205,7 +205,7 @@ serveImagesByDate = (req, res) ->
   getSketches(SKETCH_DIR).then (sketches) ->
     base = '/date/' + req.params.year
     if req.params.month
-      regexp = new RegExp('^' + req.params.year + '-' + req.params.month + '.* #journal[ \.]')
+      regexp = new RegExp('^' + req.params.year + '-' + req.params.month + '.*')
       urlFunc = null
     else if req.params.year
       regexp = new RegExp(req.params.year + ' .*#monthly')
@@ -225,7 +225,7 @@ serveImagesByDate = (req, res) ->
 
 express = require 'express'
 app = express()
-app.use '/followup/:filename', auth.connect(basic)   # Uncomment to auth for everything
+app.use '/followup/:filename', auth.connect(basic)  
 app.get '/random', serveRandomImage
 app.get '/id/:id', serveImageByID
 app.get '/image/:filename', serveImageByName

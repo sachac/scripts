@@ -36,7 +36,11 @@ function parseValue(details) {
   }
   return price;
 }
-                    
+
+function uppercaseFirst(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+}
+
 function getFlyer(url) {
   return rp.get(url).then(function(response) {
     var $ = cheerio.load(response);
@@ -44,7 +48,7 @@ function getFlyer(url) {
     $('table[colspan="2"]').each(function() {
       var cells = $(this).find('td');
       // $0.67  or  2/$3.00 or $1.25ea
-      var item = $(cells[0]).text().replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
+      var item = uppercaseFirst($(cells[0]).text().replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, ''));
       var details = $(cells[1]).text().replace(/([ \t\r\n\u00a0\u0000]|&nbsp;)+/g, ' ').replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, '');
       var matches;
       var save = '';

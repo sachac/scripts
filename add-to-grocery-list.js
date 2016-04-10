@@ -8,6 +8,7 @@
 var config = require(require('home-dir')() + '/.secret');
 var rp = require('request-promise');
 var cheerio = require('cheerio');
+var split = require('split');
 
 function login() {
   return rp({url: 'https://www.ourgroceries.com/sign-in?url=' + encodeURIComponent('/your-lists/list/' + config.grocery.list),
@@ -33,4 +34,16 @@ function addGroceries(items) {
   return req;
 }
 
-login().then(function() { addGroceries(process.argv.slice(2)); }).then(function(a) { console.log('Added.'); });
+var items = [];
+if (process.argv.length < 3) {
+  // No arguments specified - read from stdin
+  process.stdin.pipe(split()).on('data', function(line) {
+    if (line) { items.push(line); }
+  }).on('end', function() {
+    login().then(function() { addGroceries(items); }).then(function(a) { console.log('Added.'); });
+  });
+} else {
+  items = process.argv.slice(2);
+  login().then(function() { addGroceries(items); }).then(function(a) { console.log('Added.'); });
+}
+

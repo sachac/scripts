@@ -41,8 +41,9 @@
 
 Executable="$1"
 ExecutableBase="$(basename "$Executable")"
+Launchcommand="$2"
 Usage="\
-Usage: $(basename $0) command
+Usage: $(basename $0) command [launchcommand]
 E.g.:  $(basename $0) google-chrome\
 "
 
@@ -59,7 +60,11 @@ MostRecentWID="$(xdotool search --class "$ExecutableBase" | tail -1 2> /dev/null
 
 if [[ -z "$MostRecentWID" ]]; then
   echo "$ExecutableBase not found. Launching new window."
-  "$Executable" > /dev/null 2>&1 &
+  if [[ -z "$LaunchCommand" ]]; then
+    "$Executable" > /dev/null 2>&1 &
+  else
+    "$LaunchCommand" > /dev/null 2>&1 &
+  fi
   disown
 else
   echo "Focusing existing instance of $ExecutableBase."

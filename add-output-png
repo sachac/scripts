@@ -1,8 +1,8 @@
 #!/bin/bash
-
+LAYER=${1-~/Dropbox/Inbox/output.png}
 xdotool windowactivate --sync $(xdotool search --name krita | tail -1); sleep 1
 xdotool key --delay 50 Alt+l i m ; sleep 3
-xdotool type ~/Dropbox/Inbox/output.png ; sleep 1
+xdotool type $LAYER ; sleep 1
 xdotool key Return ; sleep 3
 xdotool key Alt+l l ; sleep 1
 xdotool key Tab Tab ; sleep 1

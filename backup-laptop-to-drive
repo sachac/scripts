@@ -1,6 +1,9 @@
 #!/bin/bash
 
+# http://stackoverflow.com/questions/8580873/do-not-show-directories-in-rsync-output
 DESTINATION=/media/sacha/My\ Passport
-rsync -avu -FF --chmod u+rwx ~/ "$DESTINATION/sacha/" --exclude=Clips --exclude=Documents/Adphoto --exclude=node_modules --exclude=bower_components --exclude=tmp --exclude=elpa --exclude=.node-gyp --exclude=.vagrant.d --exclude=.thumbnails --exclude=.yaoddmuse --exclude=Downloads/ --exclude=R/ --exclude=code/emacswiki.org --exclude=AppData --exclude="Documents/Calibre Library"  --exclude="VirtualBox VMs" --prune-empty-dirs
+rsync -avu -FF --chmod u+rwx ~/ "$DESTINATION/sacha/" --exclude=Clips --exclude=Documents/Adphoto --exclude=node_modules --exclude=bower_components --exclude=tmp --exclude=elpa --exclude=.node-gyp --exclude=.vagrant.d --exclude=.thumbnails --exclude=.yaoddmuse --exclude=Downloads/ --exclude=R/ --exclude=code/emacswiki.org --exclude=AppData --exclude="Documents/Calibre Library"  --exclude="VirtualBox VMs" --prune-empty-dirs --exclude=backups/ | grep -E -v '/$'
+rsync -avu -FF ~/backups/ "$DESTINATION/" --exclude=node_modules --exclude=bower_components | grep -E -v '/$'
+rsync -avu -FF --chmod u+rwx ~/archives/ "$DESTINATION/high-priority/archives/" 
 
 
