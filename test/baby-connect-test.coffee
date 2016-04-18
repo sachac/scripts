@@ -1,6 +1,6 @@
 #!/usr/bin/env coffee
 # http://code.tutsplus.com/tutorials/better-coffeescript-testing-with-mocha--net-24696
-# mocha --compilers coffee:coffee-script/register
+# mocha -w --watch-extensions coffee --compilers coffee:coffee-script/register
 
 bc = require('../baby-connect')
 chai = require 'chai'
@@ -26,8 +26,57 @@ describe 'getRelativeTime', ->
     bc.getRelativeTime('5 minutes ago').format('HH:mm').should.equal('11:55')
   it 'should understand 5 hours ago', ->
     bc.getRelativeTime('5 hours ago').format('HH:mm').should.equal('07:00')
-    
+  it 'should understand -5m', ->
+    bc.getRelativeTime('-5m').format('HH:mm').should.equal('11:55')
+  it 'should understand -5h', ->
+    bc.getRelativeTime('-5h').format('HH:mm').should.equal('07:00')
+  it 'should understand -1d', ->
+    bc.getRelativeTime('-1d').format('YYYY-MM-DD').should.equal('2015-12-31')
+  it 'should understand yyyy-mm-dd', ->
+    bc.getRelativeTime('2016-02-22').format('YYYY-MM-DD').should.equal('2016-02-22')
+  it 'should understand hh:mm', ->
+    bc.getRelativeTime('11:30').format('HH:mm').should.equal('11:30')
+  
 describe 'parseCommand', ->
+  describe 'activity', ->
+    it 'should understand activities', ->
+      p = bc.parseCommand('activity note A is having a bath', {})
+      p.should.have.property('function', bc.logActivity)
+      p.should.have.property('body', 'A is having a bath')
+  describe 'mood', ->
+    it 'should understand the mood', ->
+      p = bc.parseCommand('mood is crying', {})
+      p.should.have.property('title').that.matches(/crying/)
+      p = bc.parseCommand('calm', {})
+      p.should.have.property('title').that.matches(/calm/)
+    it 'should understand relative time', ->
+      p = bc.parseCommand('crying 5 minutes ago', {})
+      p.should.have.property('title').that.matches(/crying/)
+      p.startTime.format('HH:mm').should.equal('11:55')
+  describe 'nurse', ->
+    it 'should understand which side', ->
+      p = bc.parseCommand('nursed left side for 10 minutes', {})
+      p.should.have.property('left', 10)
+      p.should.have.property('lastSide', 'left')
+      p = bc.parseCommand('nursed right side for 10 minutes', {})
+      p.should.have.property('right', 10)
+      p.should.have.property('lastSide', 'right')
+      p = bc.parseCommand('nursed left side for 10 minutes and right side for 5 minutes', {})
+      p.should.have.property('left', 10)
+      p.should.have.property('right', 5)
+      p.should.have.property('lastSide', 'right')
+      p = bc.parseCommand('nursed right side for 10 minutes and left side for 5 minutes', {})
+      p.should.have.property('right', 10)
+      p.should.have.property('left', 5)
+      p.should.have.property('lastSide', 'left')
+    it 'should understand relative time start', ->
+      p = bc.parseCommand('nursed left side for 10 minutes', {})
+      p.endTime.format('HH:mm').should.equal('12:00')
+      p.startTime.format('HH:mm').should.equal('11:50')
+    it 'should understand relative time end', ->
+      p = bc.parseCommand('nursed left side for 10 minutes 5 minutes ago', {})
+      p.endTime.format('HH:mm').should.equal('11:55')
+      p.startTime.format('HH:mm').should.equal('11:45')
   describe 'update month', ->
     it 'should understand last month', ->
       p = bc.parseCommand('update last month', {})
@@ -59,6 +108,6 @@ describe 'parseCommand', ->
       p = bc.parseCommand('BM diaper note changed to disposable', {})
       p.should.have.property('function', bc.logDiaper)
       p.should.have.property('type', 'BM')
-      p.should.have.property('note').that.matches(/changed to disposable/)
+      p.should.have.property('body').that.matches(/changed to disposable/)
 
 

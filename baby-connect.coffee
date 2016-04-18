@@ -78,9 +78,7 @@ exports.logStatus = logStatus
 
 # params: child, type (BM | wet), time, left (mins), right (mins), lastSide (left|right)
 logNurse = (params) =>
-  if params.endTime
-    params.endTime = endTime
-  else
+  if !params.endTime
     params.endTime = params.time.clone().add((+params.left || 0) + (+params.right || 0), 'minutes')
   if !params.lastSide
     params.lastSide = if params.left then 'left' else 'right'
@@ -161,6 +159,27 @@ logDiary = (params) =>
   }
   logStatus(formData)
 
+# params: childID, time, txt, endTime (optional)
+logActivity = (params) =>
+  formData = {
+    Kid: params.child.id,
+    C: 700,
+    fmt: 'long'
+    txt: params.text || params.body,
+    n: params.body,
+    listKid: -1
+  }
+  if params.time
+    formData.uts = params.time.format('HHmm')
+    formData.ptm = params.time.format('HHmm')
+    formData.pdt = params.time.format('YYMMDD')
+  if params.endTime
+    formData.d = params.endTime.diff(params.time, 'minutes')
+    formData.e = params.endTime.format('M/DD/YYYY HH:mm')
+    formData.ptm = params.endTime.format('HHmm')
+  logStatus(formData)
+exports.logActivity = logActivity
+  
 # params: childID, time, endTime (optional)
 logSleep = (params) =>
   p = q.defer()
@@ -335,10 +354,10 @@ parseCommand = (s, params) ->
     _.assign(params, {function: logSleep, endTime: params.time, startTime: null, time: null})
   else if s.match /update/
     _.assign(params, {function: update})
-    if s.match /week/
-      _.assign(params, {span: 'week'})
     if s.match /month/
       _.assign(params, {span: 'month'})
+    else
+      _.assign(params, {span: 'week'})
   else if s.match /update last week/
     params.time.subtract(1, 'week').endOf('week')
     _.assign(params, {function: update, span: 'week'})
@@ -373,10 +392,15 @@ parseCommand = (s, params) ->
     params.endTime = params.startTime.clone()
     params.startTime.subtract((params.left || 0 + params.right || 0), 'minutes')
     params.time = params.startTime
+  else if s.match /summary/
+    params.function = getBabyConnectSummary
+  else if matches = s.match(/activity/)
+    _.assign(params, {function: logActivity})
   params
 exports.parseCommand = parseCommand
 
 if require.main == module
   p = {child: config.babyConnect.kids.main}
   parseCommand(process.argv[2], p)
-  p.function(p)
+  p.function(p).then (result) =>
+    console.log result
