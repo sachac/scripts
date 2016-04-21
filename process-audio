@@ -1,0 +1,5 @@
+#!/bin/bash
+
+cd ~/Dropbox/media
+normalize-audio *.wav
+mv *.wav ~/archives/2016/audio/
