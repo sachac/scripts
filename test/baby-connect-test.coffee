@@ -38,6 +38,29 @@ describe 'getRelativeTime', ->
     bc.getRelativeTime('11:30').format('HH:mm').should.equal('11:30')
   
 describe 'parseCommand', ->
+  describe 'temporary notes', ->
+    it 'should save time and command', ->
+      p = bc.parseCommand('save nursed left side', {user: 'sacha'})
+      p.should.have.property('function', bc.saveNote)
+      p.should.have.property('value').that.eql({body: 'nursed left side'})
+      p.time.format('YYYY-MM-DD HH:mm').should.equal('2016-01-01 12:00')
+    it 'should save json', ->
+      p = bc.parseCommand('save {"body": "nursed left side"}', {user: 'sacha'})
+      p.should.have.property('function', bc.saveNote)
+      p.should.have.property('value').that.eql({body: 'nursed left side'})
+      p.time.format('YYYY-MM-DD HH:mm').should.equal('2016-01-01 12:00')
+    it 'should load time and command', ->
+      bc.executeCommand('save nursed left side', {user: 'sacha'}).then () =>
+        bc.executeCommand('load', {user: 'sacha'}).then (p) =>
+          p.should.have.property('value').that.eql({"body": "nursed left side"})
+          moment(p.time).format('YYYY-MM-DD HH:mm').should.equal('2016-01-01 12:00')
+    it 'should clear', ->
+      bc.executeCommand('save nursed left side', {user: 'sacha'}).then () =>
+        bc.executeCommand('clear', {user: 'sacha'})
+      .then () =>
+        bc.executeCommand('load', {user: 'sacha'})
+      .then (data) =>
+        data.should.eql({})
   describe 'activity', ->
     it 'should understand activities', ->
       p = bc.parseCommand('activity note A is having a bath', {})
@@ -77,6 +100,14 @@ describe 'parseCommand', ->
       p = bc.parseCommand('nursed left side for 10 minutes 5 minutes ago', {})
       p.endTime.format('HH:mm').should.equal('11:55')
       p.startTime.format('HH:mm').should.equal('11:45')
+    it 'should understand relative time start', ->
+      p = bc.parseCommand('nursed left side for 10 minutes starting 2016-02-01 14:00', {})
+      p.startTime.format('HH:mm').should.equal('14:00')
+      p.endTime.format('HH:mm').should.equal('14:10')
+    it 'should understand relative time end when time is specified', ->
+      p = bc.parseCommand('nursed left side for 10 minutes ending 2016-02-01 14:00', {})
+      p.startTime.format('HH:mm').should.equal('13:50')
+      p.endTime.format('HH:mm').should.equal('14:00')
   describe 'update month', ->
     it 'should understand last month', ->
       p = bc.parseCommand('update last month', {})

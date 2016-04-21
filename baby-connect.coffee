@@ -304,6 +304,16 @@ getRelativeTime = (s, base) ->
     base = moment()
   else
     base = base.clone()
+  if matches = s.match(/([0-9]+):([0-9]+)/)
+    base.hour(matches[1])
+    base.minute(matches[2])
+  if matches = s.match(/([0-9]+)-([0-9]+)-([0-9]+)/)
+    base.year(+matches[1])
+    base.month(+matches[2] - 1)
+    base.date(+matches[3])
+  else if matches = s.match(/([0-9]+)-([0-9]+)/)
+    base.month(+matches[1] - 1)
+    base.date(matches[2])
   if s.match /last week/
     base.subtract(1, 'week').endOf('week')
   if s.match /last month/
@@ -322,18 +332,41 @@ getRelativeTime = (s, base) ->
     base.subtract(+matches[1], 'minutes')
   if matches = s.match(/([0-9]+)h/)
     base.subtract(+matches[1], 'hours')
-  if matches = s.match(/([0-9]+):([0-9]+)/)
-    base.hour(matches[1])
-    base.minute(matches[2])
-  if matches = s.match(/([0-9]+)-([0-9]+)-([0-9]+)/)
-    base.year(+matches[1])
-    base.month(+matches[2] - 1)
-    base.date(+matches[3])
-  else if matches = s.match(/([0-9]+)-([0-9]+)/)
-    base.month(+matches[1] - 1)
-    base.date(matches[2])
   base
 exports.getRelativeTime = getRelativeTime
+
+# params: user, name, value (time, ...)
+saveNote = (params) ->
+  db = new sqlite3.Database(DB_FILE)
+  p = q.defer()
+  db.run('INSERT OR REPLACE INTO tempdata (user, name, value, time) VALUES (?, ?, ?, ?)', [params.user, params.name, JSON.stringify(params.value), params.time.toDate()], (err) =>
+    p.resolve(err)
+  )
+  p.promise
+exports.saveNote = saveNote
+
+# params: user, name
+loadNote = (params) ->
+  db = new sqlite3.Database(DB_FILE)
+  p = q.defer()
+  db.get('SELECT value, time FROM tempdata WHERE user=? AND name=?', [params.user, params.name], (err, row) =>
+    if row
+      p.resolve({value: JSON.parse(row.value), time: row.time})
+    else
+      p.resolve({})
+  )
+  p.promise
+exports.loadNote = loadNote
+
+# params: user, name
+clearNote = (params) ->
+  db = new sqlite3.Database(DB_FILE)
+  p = q.defer()
+  db.run('DELETE FROM tempdata WHERE user=? AND name=?', [params.user, params.name], (err) =>
+    p.resolve(err)
+  )
+  p.promise
+exports.clearNote = clearNote
   
 parseCommand = (s, params) ->
   matches = null
@@ -344,7 +377,17 @@ parseCommand = (s, params) ->
     params.body = matches[1]
   # Try to parse duration or end time
   # Other commands
-  if s.match(/wet diaper|pee/)
+  if s.match /save/
+    if matches = s.match /save ({.*)/
+      _.assign(params, {value: JSON.parse(matches[1])})
+    else if matches = s.match /save (.*)/
+      _.assign(params, {value: {body: matches[1]}})
+    _.assign(params, {function: saveNote, name: 'note'})
+  else if s.match /load/
+    _.assign(params, {function: loadNote, name: 'note'})
+  else if s.match /clear/
+    _.assign(params, {function: clearNote, name: 'note'})
+  else if s.match(/wet diaper|pee/)
     _.assign(params, {function: logDiaper, type: 'wet'})
   else if s.match(/BM diaper|poo/)
     _.assign(params, {function: logDiaper, type: 'BM'})
@@ -389,9 +432,12 @@ parseCommand = (s, params) ->
       params.lastSide = 'left'
     else if s.match /right/
       params.lastSide = 'right'
-    params.endTime = params.startTime.clone()
-    params.startTime.subtract((params.left || 0 + params.right || 0), 'minutes')
-    params.time = params.startTime
+    if s.match /starting/
+      params.endTime = params.startTime.clone().add((params.left || 0 + params.right || 0), 'minutes')
+    else
+      params.endTime = params.startTime.clone()
+      params.startTime.subtract((params.left || 0 + params.right || 0), 'minutes')
+      params.time = params.startTime
   else if s.match /summary/
     params.function = getBabyConnectSummary
   else if matches = s.match(/activity/)
@@ -399,8 +445,12 @@ parseCommand = (s, params) ->
   params
 exports.parseCommand = parseCommand
 
+executeCommand = (s, params) =>
+  p = parseCommand(s, params)
+  return p.function(p)
+exports.executeCommand = executeCommand
+
 if require.main == module
   p = {child: config.babyConnect.kids.main}
-  parseCommand(process.argv[2], p)
-  p.function(p).then (result) =>
+  executeCommand(process.argv[2], p).then (result) =>
     console.log result

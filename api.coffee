@@ -8,7 +8,7 @@ q = require 'q'
 
 babyConnectProcessor = (req, res) =>
   s = if req.body && req.body.s then req.body.s else req.query.s
-  params = {child: config.babyConnect.kids.main}
+  params = {child: config.babyConnect.kids.main, user: req.user}
   babyconnect.parseCommand(s, params)
   if params.function
     q(params.function(params)).then((data) =>
