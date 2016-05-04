@@ -1,0 +1,1 @@
+forever -w --watchDirectory=/home/sacha/bin/ --killSignal=SIGTERM  -c coffee ~/bin/serve-current-dir.coffee -- ~/Dropbox/apps/ ~/bin/api.coffee
