@@ -4,6 +4,7 @@ ssh $SERVER "sudo chown sacha ~/blog/wp-content/uploads -R"
 rsync -avzue ssh $SERVER:~/backups/ ~/backups/server/db/
 rsync -avzue ssh $SERVER:/var/www/ ~/backups/server/www/ --exclude=cache --exclude=bower_components --exclude=node_modules
 rsync -avzue ssh $SERVER:/var/git/ ~/backups/server/git/
+rsync -avzue ssh $SERVER:/mnt/storage/uploads/ ~/backups/server/uploads/
 rsync -avzue ssh $SERVER:/home/sacha/ ~/backups/server/home/ --exclude=backups --exclude=.gem --exclude=node_modules --exclude=bower_components --exclude=.npm --exclude=.cpan --exclude=.gnupg
 rsync -avzue ssh ~/sketches/ $SERVER:/mnt/storage/sacha/sketches/ --exclude=thumbnails
 rsync -avzue ssh ~/Dropbox/Camera\ Uploads/ $SERVER:/mnt/storage/sacha/photos/

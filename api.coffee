@@ -2,6 +2,7 @@ express = require 'express'
 router = express.Router()
 sqlite3 = require('sqlite3').verbose()
 babyconnect = require './baby-connect'
+sketches = require './serve-sketches'
 config = require(require('home-dir')() + '/.secret')
 moment = require 'moment'
 q = require 'q'
@@ -17,11 +18,8 @@ babyConnectProcessor = (req, res) =>
   else
     res.send 'Unknown command: ' + s
 
-router.get '/s', (req, res) =>
+router.all '/s', (req, res) =>
   babyConnectProcessor(req, res)
-router.post '/s', (req, res) =>
-  babyConnectProcessor(req, res)
-  
 router.get '/babyconnect/data.csv', (req, res) =>
   babyconnect.convertToCSV().then (data) =>
     res.send(data)
@@ -30,4 +28,7 @@ router.post '/babyconnect/update', (req, res) =>
   q(babyconnect.update({child: child, span: 'week'})).then () =>
     res.sendStatus(200)
 
+
+sketchesServer = sketches.setupServer('/api/sketches')
+router.use '/sketches', sketchesServer
 module.exports = router

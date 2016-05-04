@@ -7,9 +7,6 @@ q = require 'q'
 auth = require 'http-auth'
 secret = require '/home/sacha/.secret.js'
 
-basic = auth.basic({realm: "Sketches"}, (username, password, callback) ->
-  callback(username == secret.auth.user && password == secret.auth.password)
-)
 ################################################################################
 # Utility functions
 getSketches = (dir) ->
@@ -98,8 +95,8 @@ linkTags = (filename) ->
   )
   return filename
     
-linkToImage = (filename, optionalURL) ->
-  url = '/image/' + encodeURIComponent(filename)
+linkToImage = (base, filename, optionalURL) ->
+  url = base + '/image/' + encodeURIComponent(filename)
   s = '<div class="grid-item" data-filename="' + filename + '"><a href="' + (optionalURL || url) + '"><img src="' + url + '" width="100%"></a>'
   s += '<br />' + linkTags(filename) + '<br /><a href="#" class="followup">Follow up</a></div>'
   return s
@@ -114,43 +111,50 @@ serveRandomImage = (req, res) ->
     res.header "Cache-Control", "no-cache, no-store, must-revalidate"
     res.header "Pragma", "no-cache"
     res.header "Expires", 0
-    res.send header + formatList(list) + footer + masonry
+    s = header + formatList(req, list) + footer + masonry
+    res.send s
+exports.serveRandomImage = serveRandomImage
 
 showTextList = (req, res, filter) ->
   getSketches(SKETCH_DIR).then (sketches) ->
     list = sketches.filter(filter)
     res.send header + '<ul>' + list.map((filename) ->
-      url = '/image/' + encodeURIComponent(filename)
+      url = req.app.baseUrl + '/image/' + encodeURIComponent(filename)
       return '<li><a href="' + url + '">View</a> - ' + linkTags(filename) + '</li>'
     ).join('') + '</ul>' + footer
+exports.showTextList = showTextList
   
 listNonjournalSketches = (req, res) ->
   showTextList(req, res, (s) ->
     return !s.match(/#journal/) && s.match(/^[0-9]/)
   )
+exports.listNonjournalSketches = listNonjournalSketches
     
 listJournalSketches = (req, res) ->
   showTextList(req, res, (s) ->
     return s.match(/#journal|#monthly|#yearly/)
   )
+exports.listJournalSketches = listJournalSketches
 
 serveImageByID = (req, res) ->
   getSketches(SKETCH_DIR).then (sketches) ->
     filename = getSketchByID(sketches, req.params.id)
-    res.send header + linkToImage(filename) + footer
+    res.send header + linkToImage(req.app.path(), req.filename) + footer
+exports.serveImageByID = serveImageByID
 
 serveImageByName = (req, res) ->
   filename = SKETCH_DIR + '/' + req.params.filename
   res.sendFile filename
+exports.serveImageByName = serveImageByName
 
-formatList = (list, urlFunc, size) ->
-  size ||= '50%'
+formatList = (req, list, urlFunc, size = '50%') ->
   return '<style type="text/css">.grid-item { width: ' + size + '; float: left; margin-bottom: 1em }</style><div class="grid">' + (list.map((s, index) ->
-    html = linkToImage(s, (if urlFunc then urlFunc(s) else null), size)
+    html = linkToImage(req.app.locals.base, s, (if urlFunc then urlFunc(s) else null))
     if ((size == "33%" && index % 3 == 2) || (size == "50%" && index % 2 == 1))
       html += '<br clear="both" />'
     return html
   ).join '') + '</div>'
+exports.formatList = formatList
 
 countTags = (sketches) ->
   tags = {}
@@ -164,6 +168,7 @@ countTags = (sketches) ->
   list = ([key, val] for own key, val of tags)
   return list.sort (a, b) ->
     return b[1] - a[1]
+exports.countTags = countTags
     
 serveTagList = (req, res) ->
   getSketches(SKETCH_DIR).then (sketches) ->
@@ -179,19 +184,22 @@ serveTagList = (req, res) ->
     res.send header + '<ul>' + tags.map((tagInfo) ->
       return '<li><a href="/tag/' + tagInfo[0] + '">' + tagInfo[0] + ' (' + tagInfo[1] + ')</a></li>'
     ).join('') + '</ul>' + footer
+exports.serveTagList = serveTagList
 
 followUp = (req, res) ->
   filename = req.params.filename.replace(/["'\\]/, '') # a little bit of cleaning; probably should require auth
   command = 'emacsclient --eval \'(my/follow-up-on-sketch "' + filename + '")\''
   require('child_process').exec(command)
   res.status(200)
+exports.followUp = followUp
   
 serveImagesByTag = (req, res) ->
   tag = req.params.tag.split(/,/g)
   page = ''
   getSketches(SKETCH_DIR).then (sketches) ->
     q(getSketchesByTags(sketches, tag)).then (list) ->
-      res.send header + formatList(list) + footer
+      res.send header + formatList(req, list) + footer
+exports.serveImagesByTag = serveImagesByTag
 
 showSketchesByRange = (req, res) ->
   start = req.query.start
@@ -199,11 +207,12 @@ showSketchesByRange = (req, res) ->
   getSketches(SKETCH_DIR).then (sketches) ->
     inRange = sketches.filter (x) ->
       return x >= start && (!end || x <= end)
-    res.send header + formatList(inRange) + footer
+    res.send header + formatList(req, inRange) + footer
+exports.showSketchesByRange = showSketchesByRange
 
 serveImagesByDate = (req, res) ->
   getSketches(SKETCH_DIR).then (sketches) ->
-    base = '/date/' + req.params.year
+    base = req.app.locals.base + '/date/' + req.params.year
     if req.params.month
       regexp = new RegExp('^' + req.params.year + '-' + req.params.month + '.*')
       urlFunc = null
@@ -218,24 +227,36 @@ serveImagesByDate = (req, res) ->
             else
               return base + '/' + (i + 1)
     list = getSketchesByRegexp(sketches, regexp).reverse()
-    res.send header + formatList(list, urlFunc, '33%') + footer
-        
+    res.send header + formatList(req, list, urlFunc, '33%') + footer
+exports.serveImagesByDate = serveImagesByDate
+
 ################################################################################
 # Express
 
-express = require 'express'
-app = express()
-app.use '/followup/:filename', auth.connect(basic)  
-app.get '/random', serveRandomImage
-app.get '/id/:id', serveImageByID
-app.get '/image/:filename', serveImageByName
-app.get '/tag', serveTagList
-app.get '/tag/:tag', serveImagesByTag
-app.get '/date/:year/:month?', serveImagesByDate
-app.get '/nonjournal', listNonjournalSketches
-app.get '/journal', listJournalSketches
-app.get '/range', showSketchesByRange
-app.get '/', serveRandomImage
-app.post '/followup/:filename', followUp
-app.listen process.env.PORT || 3000, () ->
-  console.log "Listening on " + (process.env.PORT || 3000)
+setupServer = (base, authentication) =>
+  express = require 'express'
+  app = express()
+  app.locals.base = base
+  app.get '/random', serveRandomImage
+  app.get '/id/:id', serveImageByID
+  app.get '/image/:filename', serveImageByName
+  app.get '/tag', serveTagList
+  app.get '/tag/:tag', serveImagesByTag
+  app.get '/date/:year/:month?', serveImagesByDate
+  app.get '/nonjournal', listNonjournalSketches
+  app.get '/journal', listJournalSketches
+  app.get '/range', showSketchesByRange
+  app.get '/', serveRandomImage
+  if authentication
+    app.use '/followup/:filename', auth.connect(authentication)  
+    app.post '/followup/:filename', followUp
+  app
+exports.setupServer = setupServer
+
+if require.main == module
+  basic = auth.basic({realm: "Sketches"}, (username, password, callback) ->
+    callback(username == secret.auth.user && password == secret.auth.password)
+  )
+  app = setupServer('', basic)
+  app.listen process.env.PORT || 3000, () ->
+    console.log "Listening on " + (process.env.PORT || 3000)
