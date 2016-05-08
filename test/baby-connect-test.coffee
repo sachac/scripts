@@ -116,12 +116,42 @@ describe 'parseCommand', ->
     it 'should understand last week', ->
       p = bc.parseCommand('update last week', {})
       p.time.format('YYYY-MM-DD').should.equal('2015-12-26')
+  describe 'log supplement', ->
+    it 'should use the right function', ->
+      p = bc.parseCommand('drank 0.25 oz of milk', {})
+      p.should.have.property('function', bc.logSupplement)
+    it 'should capture quantity', ->
+      p = bc.parseCommand('drank 0.25 oz of milk', {})
+      p.should.have.property('quantity', 0.25)
+      p = bc.parseCommand('drank 0.50 oz of milk', {})
+      p.should.have.property('quantity', 0.5)
+    it 'should capture type', ->
+      p = bc.parseCommand('drank 0.25 oz of milk', {})
+      p.should.have.property('type', 'milk')
+      p = bc.parseCommand('drank 0.25 oz of formula', {})
+      p.should.have.property('type', 'formula')
+    it 'should capture notes', ->
+      p = bc.parseCommand('drank 0.25 oz of milk note eyedropper', {})
+      p.should.have.property('body').that.matches(/eyedropper/)
+    it 'should capture duration', ->
+      p = bc.parseCommand('drank 0.25 oz of milk over 10 minutes', {})
+      p.should.have.property('duration', 10)
+    it 'should understand start and end times', ->
+      p = bc.parseCommand('drank 0.25 oz of milk from 9:00 to 9:30', {})
+      p.should.have.property('duration', 30)
+      p.startTime.format('H:mm').should.equal('9:00')
+      p.endTime.format('H:mm').should.equal('9:30')
   describe 'log diaper', ->
     it 'should understand relative times', ->
       p = bc.parseCommand('peed 5 minutes ago', {})
       p.time.format('HH:mm').should.equal('11:55')
       p = bc.parseCommand('pooed 10 minutes ago', {})
       p.time.format('HH:mm').should.equal('11:50')
+    it 'should handle open air', ->
+      p = bc.parseCommand('wet diaper open air', {})
+      p.should.have.property('function', bc.logDiaper)
+      p.should.have.property('type', 'wet')
+      p.should.have.property('openAir', true)
     it 'should distinguish diaper types', ->
       p = bc.parseCommand('wet diaper', {})
       p.should.have.property('function', bc.logDiaper)

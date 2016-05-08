@@ -76,7 +76,7 @@ logStatus = (form) =>
     form: form})
 exports.logStatus = logStatus
 
-# params: child, type (BM | wet), time, left (mins), right (mins), lastSide (left|right)
+# params: child, time, left (mins), right (mins), lastSide (left|right)
 logNurse = (params) =>
   if !params.endTime
     params.endTime = params.time.clone().add((+params.left || 0) + (+params.right || 0), 'minutes')
@@ -105,8 +105,40 @@ logNurse = (params) =>
     listKid: -1
   })
 exports.logNurse = logNurse
+
+# params: child, time, type, quantity
+logSupplement = (params) =>
+  label = params.child.name + ' drank ' + params.quantity + ' oz of ' + params.type
+  if params.endTime
+    duration = params.endTime.diff(params.startTime, 'minutes')
+  else
+    duration = params.duration
+    
+  if duration
+    label = label + ' (' + duration + 'min)'
   
-# params: child, type (BM | wet), time, text (optional), body
+  logStatus({
+    Kid: params.child.id,
+    C: 300,
+    uts: params.time.format('HHmm'),
+    ptm: params.time.format('HHmm'),
+    pdt: getTSForDay(params.time),
+    d: duration,
+    e: if params.endTime then params.endTime.format('M/DD/YYYY HH:mm') end,
+    n: params.body,
+    txt: label + (if params.body then ' - ' + params.body else ''),
+    p: params.quantity + ';oz;' + params.type,
+    isst: 1,
+    listKid: -1
+  })
+exports.logSupplement = logSupplement
+
+# params: child, type (BM | wet), time, text (optional), body,
+# openAir
+#
+# open air: 0,1,,
+# small, open air: 001,,
+# medium, open air: 011,,
 logDiaper = (params) =>
   typeCode = null
   if params.type.match(/BM/i) and params.type.match(/wet/)
@@ -115,6 +147,11 @@ logDiaper = (params) =>
     typeCode = '401'
   else if params.type.match(/wet/)
     typeCode = '403'
+  options = '0,'
+  if params.openAir
+    options += '1,,'
+  else
+    options += '0,,'
   logStatus({
     Kid: params.child.id,
     C: typeCode,
@@ -124,7 +161,7 @@ logDiaper = (params) =>
     uts: params.time.format('HHmm'),
     ptm: params.time.format('HHmm'),
     pdt: params.time.format('YYMMDD'),
-    p: '0,0,,', # options
+    p: options,
     listKid: -1
   })
 exports.logDiaper = logDiaper
@@ -367,7 +404,7 @@ clearNote = (params) ->
   )
   p.promise
 exports.clearNote = clearNote
-  
+
 parseCommand = (s, params) ->
   matches = null
   # Try to parse the time
@@ -375,6 +412,10 @@ parseCommand = (s, params) ->
   params.time = params.startTime
   if matches = s.match(/note (.+)/)
     params.body = matches[1]
+  if matches = s.match /(for|over) ([0-9]+) minutes/
+    _.assign(params, {duration: +matches[2]})
+  if matches = s.match /(to|until) ([0-9:]+)/
+    params.endTime = getRelativeTime(matches[2], moment())
   # Try to parse duration or end time
   # Other commands
   if s.match /save/
@@ -389,8 +430,12 @@ parseCommand = (s, params) ->
     _.assign(params, {function: clearNote, name: 'note'})
   else if s.match(/wet diaper|pee/)
     _.assign(params, {function: logDiaper, type: 'wet'})
+    if s.match (/open air/)
+      params.openAir = true
   else if s.match(/BM diaper|poo/)
     _.assign(params, {function: logDiaper, type: 'BM'})
+    if s.match (/open air/)
+      params.openAir = true
   else if s.match /sleep/
     _.assign(params, {function: logSleep})
   else if s.match /wake/
@@ -409,6 +454,14 @@ parseCommand = (s, params) ->
   else if s.match /update last month/
     params.time.subtract(1, 'month').startOf('month')
     _.assign(params, {function: update, span: 'month'})
+  else if s.match /drank/
+    params.function = logSupplement
+    if matches = s.match(/([.0-9]+) oz/)
+      params.quantity = +matches[1]
+    if s.match /formula/i
+      params.type = 'Formula'
+    if s.match /milk/i
+      params.type = 'Milk'
   else if matches = s.match /mood (is|was) (.*)/
     _.assign(params, {
       function: logMood,
@@ -442,6 +495,10 @@ parseCommand = (s, params) ->
     params.function = getBabyConnectSummary
   else if matches = s.match(/activity/)
     _.assign(params, {function: logActivity})
+  if params.duration and !params.endTime
+    params.endTime = params.startTime.clone().add(params.duration, 'minutes')
+  if params.endTime and !params.duration
+    params.duration = params.endTime.diff(params.startTime, 'minutes')
   params
 exports.parseCommand = parseCommand
 
