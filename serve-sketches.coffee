@@ -120,7 +120,7 @@ showTextList = (req, res, filter) ->
   getSketches(SKETCH_DIR).then (sketches) ->
     list = sketches.filter(filter)
     res.send header(req.app.locals.templateVars) + '<ul>' + list.map((filename) ->
-      url = req.app.base + '/image/' + encodeURIComponent(filename)
+      url = req.app.locals.base + '/image/' + encodeURIComponent(filename)
       return '<li><a href="' + url + '">View</a> - ' + linkTags(filename) + '</li>'
     ).join('') + '</ul>' + footer(req.app.locals.templateVars)
 exports.showTextList = showTextList
