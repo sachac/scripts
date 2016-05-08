@@ -6,6 +6,7 @@ path = require 'path'
 q = require 'q'
 auth = require 'http-auth'
 secret = require '/home/sacha/.secret.js'
+_ = require 'lodash'
 
 ################################################################################
 # Utility functions
@@ -62,10 +63,10 @@ getWeeklySketchesForMonth = (year, month) ->
 # Request handlers
 
 links = """
-<div class="links"><a href="/random">Random</a> - <a href="/date/2015">2015</a> - <a href="/date/2016">2016</a> - <a href="/tag">Tags by freq</a> -
-<a href="/tag?sort=alpha">Tags by alpha</a> - <a href="/nonjournal">Nonjournal</a> - <a href="/journal">Journal</a></div>
+<div class="links"><a href="<%= base %>/random">Random</a> - <a href="<%= base %>/date/2015">2015</a> - <a href="<%= base %>/date/2016">2016</a> - <a href="<%= base %>/tag">Tags by freq</a> -
+<a href="<%= base %>/tag?sort=alpha">Tags by alpha</a> - <a href="<%= base %>/nonjournal">Nonjournal</a> - <a href="<%= base %>/journal">Journal</a></div>
 """
-header = """
+header = _.template("""
 <style type="text/css">body { font-family: Arial, sans-serif; }
 ul li { margin-bottom: 0.5em }
 .links { font-size: large; margin-top: 1em; margin-bottom: 1em; clear: both }</style>
@@ -76,12 +77,12 @@ ul li { margin-bottom: 0.5em }
     $(document).ready(function() {
       $('.followup').click(function() {
         filename = $(this).closest('.grid-item').attr('data-filename');
-        $.ajax({method: 'POST', url: '/followup/' + encodeURIComponent(filename)});
+        $.ajax({method: 'POST', url: '<%= base %>/followup/' + encodeURIComponent(filename)});
       });
     });
   </script>
-  """ + links 
-footer = links
+  """ + links)
+footer = _.template(links)
 masonry = "<script>$('.grid').imagesLoaded(function() { $('.grid').masonry({itemSelector: '.grid-item'}); })</script>"
 
 linkTags = (filename) ->
@@ -111,17 +112,17 @@ serveRandomImage = (req, res) ->
     res.header "Cache-Control", "no-cache, no-store, must-revalidate"
     res.header "Pragma", "no-cache"
     res.header "Expires", 0
-    s = header + formatList(req, list) + footer + masonry
+    s = header(req.app.locals.templateVars) + formatList(req, list) + footer(req.app.locals.templateVars) + masonry
     res.send s
 exports.serveRandomImage = serveRandomImage
 
 showTextList = (req, res, filter) ->
   getSketches(SKETCH_DIR).then (sketches) ->
     list = sketches.filter(filter)
-    res.send header + '<ul>' + list.map((filename) ->
-      url = req.app.baseUrl + '/image/' + encodeURIComponent(filename)
+    res.send header(req.app.locals.templateVars) + '<ul>' + list.map((filename) ->
+      url = req.app.base + '/image/' + encodeURIComponent(filename)
       return '<li><a href="' + url + '">View</a> - ' + linkTags(filename) + '</li>'
-    ).join('') + '</ul>' + footer
+    ).join('') + '</ul>' + footer(req.app.locals.templateVars)
 exports.showTextList = showTextList
   
 listNonjournalSketches = (req, res) ->
@@ -139,7 +140,7 @@ exports.listJournalSketches = listJournalSketches
 serveImageByID = (req, res) ->
   getSketches(SKETCH_DIR).then (sketches) ->
     filename = getSketchByID(sketches, req.params.id)
-    res.send header + linkToImage(req.app.path(), req.filename) + footer
+    res.send header(req.app.locals.templateVars) + linkToImage(req.app.path(), req.filename) + footer(req.app.locals.templateVars)
 exports.serveImageByID = serveImageByID
 
 serveImageByName = (req, res) ->
@@ -181,9 +182,9 @@ serveTagList = (req, res) ->
         return -1 if a[0] < b[0]
         return 1 if a[0] > b[0]
         return 0
-    res.send header + '<ul>' + tags.map((tagInfo) ->
+    res.send header(req.app.locals.templateVars) + '<ul>' + tags.map((tagInfo) ->
       return '<li><a href="/tag/' + tagInfo[0] + '">' + tagInfo[0] + ' (' + tagInfo[1] + ')</a></li>'
-    ).join('') + '</ul>' + footer
+    ).join('') + '</ul>' + footer(req.app.locals.templateVars)
 exports.serveTagList = serveTagList
 
 followUp = (req, res) ->
@@ -198,7 +199,7 @@ serveImagesByTag = (req, res) ->
   page = ''
   getSketches(SKETCH_DIR).then (sketches) ->
     q(getSketchesByTags(sketches, tag)).then (list) ->
-      res.send header + formatList(req, list) + footer
+      res.send header(req.app.locals.templateVars) + formatList(req, list) + footer(req.app.locals.templateVars)
 exports.serveImagesByTag = serveImagesByTag
 
 showSketchesByRange = (req, res) ->
@@ -207,7 +208,7 @@ showSketchesByRange = (req, res) ->
   getSketches(SKETCH_DIR).then (sketches) ->
     inRange = sketches.filter (x) ->
       return x >= start && (!end || x <= end)
-    res.send header + formatList(req, inRange) + footer
+    res.send header(req.app.locals.templateVars) + formatList(req, inRange) + footer(req.app.locals.templateVars)
 exports.showSketchesByRange = showSketchesByRange
 
 serveImagesByDate = (req, res) ->
@@ -227,7 +228,7 @@ serveImagesByDate = (req, res) ->
             else
               return base + '/' + (i + 1)
     list = getSketchesByRegexp(sketches, regexp).reverse()
-    res.send header + formatList(req, list, urlFunc, '33%') + footer
+    res.send header(req.app.locals.templateVars) + formatList(req, list, urlFunc, '33%') + footer(req.app.locals.templateVars)
 exports.serveImagesByDate = serveImagesByDate
 
 ################################################################################
@@ -237,6 +238,7 @@ setupServer = (base, authentication) =>
   express = require 'express'
   app = express()
   app.locals.base = base
+  app.locals.templateVars = {base: base}
   app.get '/random', serveRandomImage
   app.get '/id/:id', serveImageByID
   app.get '/image/:filename', serveImageByName
