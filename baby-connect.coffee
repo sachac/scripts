@@ -51,7 +51,15 @@ getBabyConnectSummary = (params) =>
     JSON.parse x
   )
 
-# params: date, child
+# params: time, child
+retrieveDay = (params) =>
+  # date: m/dd/yyyy, gets the last 7 days
+  startDate = moment(params.time).format('MM/DD/YYYY')
+  makeBabyConnectRequest({
+    url: 'http://www.baby-connect.com/GetCmd?cmd=StatusExport&kid=' + params.child.id+ '&exportType=0&dt=' + startDate
+  })
+
+# params: time, child
 retrieveWeek = (params) =>
   # date: m/dd/yyyy, gets the last 7 days
   startDate = moment(params.time).format('MM/DD/YYYY')
@@ -99,6 +107,7 @@ logNurse = (params) =>
     pdt: getTSForDay(params.time)
     d: (+params.left || 0) + (+params.right || 0),
     e: params.endTime.format('M/DD/YYYY HH:mm'),
+    n: params.body,
     txt: label + (if params.text then ' - ' + params.text else ''),
     isst: 1,
     p: (if params.lastSide == 'left' then 1 else 2) + ';' + (+params.left || 0) + ';' + (+params.right || 0),
@@ -216,7 +225,24 @@ logActivity = (params) =>
     formData.ptm = params.endTime.format('HHmm')
   logStatus(formData)
 exports.logActivity = logActivity
-  
+
+  # params: childID, weight (oz), text, body (optional)
+logWeight = (params) =>
+  formData = {
+    Kid: params.child.id,
+    C: 1700,
+    fmt: 'long'
+    uts: params.time.format('HHmm')
+    ptm: params.time.format('HHmm')
+    pdt: params.time.format('YYMMDD')
+    txt: params.text || params.body,
+    p: params.weight,
+    n: params.body,
+    listKid: -1
+  }
+  logStatus(formData)
+exports.logWeight = logWeight
+
 # params: childID, time, endTime (optional)
 logSleep = (params) =>
   p = q.defer()
@@ -284,26 +310,48 @@ cacheData = (data) =>
   ).on('end', () =>
     stmt = db.prepare("INSERT INTO data (startTime, endTime, activity, duration, quantity, extra, label, notes, caregiver, childname) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
     db.run('BEGIN TRANSACTION')
-    db.run('DELETE FROM data WHERE startTime >= ? AND endTime <= ?', [minTime, maxTime])
-    for row in rows
-      stmt.run([row.startTime, row.endTime, row['Activity'], row['Duration (min)'], row['Quantity'], row['Extra data'], row['Text'], row['Notes'], row['Caregiver'], row['Child Name']])
-    db.run('END')
-    stmt.finalize()
-    db.close()
-    console.log 'Updated ', minTime, ' to ', maxTime
+    db.run('DELETE FROM data WHERE startTime >= ? AND endTime <= ?', [minTime, maxTime], (err) =>
+      promises = []
+      for row in rows
+        p = q.defer()
+        promises.push p.promise
+        stmt.run([row.startTime, row.endTime, row['Activity'], row['Duration (min)'], row['Quantity'], row['Extra data'], row['Text'], row['Notes'], row['Caregiver'], row['Child Name']], (err) =>
+          p.resolve(err)
+        )
+      q.allSettled(promises).then(
+        db.run('COMMIT')
+        stmt.finalize()
+        db.close()
+        console.log 'Updated ', minTime, ' to ', maxTime
+      )
+    )
   )
 exports.cacheData = cacheData
 
 cacheDataFromFile = () =>
   # Open data.csv
   data = csv.fromPath DATA_FILE, {headers: true}
-  cacheData(data)
-  
-convertToCSV = () =>
+  q(cacheData(data))
+
+# params: activity
+convertToCSV = (params) =>
   # Open SQLite database
   db = new sqlite3.Database(DB_FILE)
   p = q.defer()
-  db.all('SELECT startTime, endTime, activity, duration, quantity, extra, label, notes, caregiver, childname FROM data ORDER BY startTime DESC', (err, records) =>
+  threshold = null
+  query = 'SELECT startTime, endTime, activity, duration, quantity, extra, label, notes, caregiver, childname FROM data WHERE 1=1'
+  queryParams = {}
+  if params.activity
+    query += ' AND activity = $activity'
+    queryParams.$activity = params.activity
+  if params.days
+    query += ' AND startTime >= $date'
+    queryParams.$date = moment().subtract(+params.days, 'days').toDate()
+  query += ' ORDER BY startTime DESC'
+  console.log query, queryParams
+  db.all(query, queryParams, (err, records) =>
+    if err
+      console.log err
     csv.writeToString(records, {headers: true, transform: (row) =>
       return {
         'Start Time': moment(row.startTime).format('YYYY-MM-D HH:mm'),
@@ -330,7 +378,12 @@ refreshMonth = (params) =>
     fs.writeFile(DATA_FILE, y)
 
 update = (params) ->
-  retrieveFunction = if params.span == 'week' then retrieveWeek else retrieveMonth
+  if params.span == 'week'
+    retrieveFunction = retrieveWeek
+  else if params.span == 'day' || params.span == 'date'
+    retrieveFunction = retrieveDay
+  else
+    retrieveFunction = retrieveMonth
   retrieveFunction(params).then((body) =>
     cacheData(csv.fromString(body, {headers: true}))
   )
@@ -355,6 +408,8 @@ getRelativeTime = (s, base) ->
     base.subtract(1, 'week').endOf('week')
   if s.match /last month/
     base.subtract(1, 'month').startOf('month')
+  if s.match /yesterday/
+    base.subtract(1, 'day')
   if matches = s.match /([0-9]+) weeks? ago/
     base.subtract(+matches[1], 'week').endOf('week')
   if matches = s.match /([0-9]+) months? ago/
@@ -416,9 +471,12 @@ parseCommand = (s, params) ->
     _.assign(params, {duration: +matches[2]})
   if matches = s.match /(to|until) ([0-9:]+)/
     params.endTime = getRelativeTime(matches[2], moment())
+    params.duration = params.endTime.diff(params.startTime, 'minutes')
   # Try to parse duration or end time
   # Other commands
-  if s.match /save/
+  if s.match /cache file/
+    params.function = cacheDataFromFile
+  else if s.match /save/
     if matches = s.match /save ({.*)/
       _.assign(params, {value: JSON.parse(matches[1])})
     else if matches = s.match /save (.*)/
@@ -444,16 +502,17 @@ parseCommand = (s, params) ->
     _.assign(params, {function: update})
     if s.match /month/
       _.assign(params, {span: 'month'})
+    else if s.match /day|yesterday|today/
+      _.assign(params, {span: 'day'})
     else
       _.assign(params, {span: 'week'})
-  else if s.match /update last week/
-    params.time.subtract(1, 'week').endOf('week')
-    _.assign(params, {function: update, span: 'week'})
-  else if s.match /update month/
-    _.assign(params, {function: update, span: 'month'})
-  else if s.match /update last month/
-    params.time.subtract(1, 'month').startOf('month')
-    _.assign(params, {function: update, span: 'month'})
+  else if s.match /weighed/
+    weight = 0
+    if matches = s.match(/([\.0-9]+) kg/)
+      weight = +matches[1] * 2.2 * 16
+    else if matches = s.match(/([\.0-9]+) ?lbs?( ([\.0-9]+) ?oz)?/)
+      weight = +matches[1] * 16 + (+matches[3] || 0)
+    _.assign(params, {function: logWeight, weight: weight, text: s})
   else if s.match /drank/
     params.function = logSupplement
     if matches = s.match(/([.0-9]+) oz/)
@@ -477,6 +536,18 @@ parseCommand = (s, params) ->
     myRegexp = /(left|right) (side )?for ([0-9]+) minutes?/g
     while (matches = myRegexp.exec(s)) != null
       params[matches[1]] = +matches[3]
+    myRegexp = /(left|right) (side )?from ([0-9:]+) to ([0-9:]+)/g
+    timeSpecified = false
+    while (matches = myRegexp.exec(s)) != null
+      tempStart = getRelativeTime(matches[3])
+      tempEnd = getRelativeTime(matches[4])
+      params[matches[1]] = tempEnd.diff(tempStart, 'minutes')
+      params.startTime = tempStart
+      params.endTime = tempEnd
+      timeSpecified = true
+    if !params.left and !params.right
+      params.left = params.right = params.duration / 2
+      params.lastSide = 'right'
     if s.match /left.*right/
       params.lastSide = 'right'
     else if s.match /right.*left/
@@ -487,7 +558,7 @@ parseCommand = (s, params) ->
       params.lastSide = 'right'
     if s.match /starting/
       params.endTime = params.startTime.clone().add((params.left || 0 + params.right || 0), 'minutes')
-    else
+    else if !timeSpecified
       params.endTime = params.startTime.clone()
       params.startTime.subtract((params.left || 0 + params.right || 0), 'minutes')
       params.time = params.startTime
@@ -511,3 +582,5 @@ if require.main == module
   p = {child: config.babyConnect.kids.main}
   executeCommand(process.argv[2], p).then (result) =>
     console.log result
+  .catch (err) =>
+    console.log err
