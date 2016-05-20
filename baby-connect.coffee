@@ -347,6 +347,12 @@ convertToCSV = (params) =>
   if params.days
     query += ' AND startTime >= $date'
     queryParams.$date = moment().subtract(+params.days, 'days').toDate()
+  if params.start
+    query += ' AND endTime >= $start'
+    queryParams.$start = moment(params.start).toDate()
+  if params.end
+    query += ' AND startTime <= $end'
+    queryParams.$end = moment(params.end).toDate()
   query += ' ORDER BY startTime DESC'
   console.log query, queryParams
   db.all(query, queryParams, (err, records) =>
