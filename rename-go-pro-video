@@ -1,0 +1,6 @@
+#!/bin/zsh
+
+for FILE; do
+    TIME=$(mediainfo "$FILE" | grep "Encoded date" | head -1 | cut -c 48- | tr ": " "." )
+    mv -i "$FILE" $TIME.${FILE:e}
+done
