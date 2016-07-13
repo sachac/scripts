@@ -9,11 +9,12 @@ basic = auth.basic({realm: "Sacha"}, (username, password, callback) ->
 )
 express = require 'express'
 app = express()
-console.log process.argv
+sketches = require './serve-sketches'
+
+sketchesServer = sketches.setupServer('/api/sketches')
+app.use '/api/sketches', sketchesServer
+
 app.use auth.connect(basic)
-app.use express.static(process.argv[2] || '.')
-app.use bodyParser.urlencoded({extended: true})
-app.use bodyParser.json()
 if process.argv.length > 3
   app.all('/', (req, res, next) =>
     res.header("Access-Control-Allow-Origin", "*")
@@ -21,6 +22,9 @@ if process.argv.length > 3
     next()
   )
   app.use '/api', require(process.argv[3])
+app.use express.static(process.argv[2] || '.')
+app.use bodyParser.urlencoded({extended: true})
+app.use bodyParser.json()
   
 app.listen process.env.PORT || 3000, () ->
   console.log "Listening on " + (process.env.PORT || 3000)

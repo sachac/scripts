@@ -92,28 +92,49 @@ logNurse = (params) =>
     params.lastSide = if params.left then 'left' else 'right'
   label = params.child.name + ' nursed ('
   if params.lastSide == 'left'
-    label = label + (if params.right then (+params.right || 0) 'min right, ' else '')
+    label = label + (if params.right then (+params.right || 0) + 'min right, ' else '')
     label = label + (+params.left || 0) + 'min left'
   else
-    label = label + (if params.left then (+params.left || 0) 'min left, ' else '')
+    label = label + (if params.left then (+params.left || 0) + 'min left, ' else '')
     label = label + (+params.right || 0) + 'min right'
   label = label + ')'
-  
+  db = new sqlite3.Database(DB_FILE)
+  p = q.defer()
+  db.run('INSERT INTO data (startTime, endTime, activity, duration, label) VALUES (?, ?, ?, ?, ?)',
+    [params.time.toDate(), params.endTime.toDate(), 'Nursing', (params.left || 0) + (params.right || 0), label], () =>
+      db.close()
+      p.resolve(logStatus({
+        Kid: params.child.id,
+        C: 350,
+        uts: params.time.format('HHmm'),
+        ptm: params.time.format('HHmm'),
+        pdt: getTSForDay(params.time)
+        d: (+params.left || 0) + (+params.right || 0),
+        e: params.endTime.format('M/DD/YYYY HH:mm'),
+        n: params.body,
+        txt: label + (if params.text then ' - ' + params.text else ''),
+        isst: 1,
+        p: (if params.lastSide == 'left' then 1 else 2) + ';' + (+params.left || 0) + ';' + (+params.right || 0),
+        listKid: -1
+      })))
+  p.promise
+exports.logNurse = logNurse
+
+# params: child, time, body
+logSolids = (params) =>
+  label = params.child.name + ' ' + params.body
   logStatus({
     Kid: params.child.id,
-    C: 350,
+    C: 200,
     uts: params.time.format('HHmm'),
     ptm: params.time.format('HHmm'),
-    pdt: getTSForDay(params.time)
-    d: (+params.left || 0) + (+params.right || 0),
-    e: params.endTime.format('M/DD/YYYY HH:mm'),
+    pdt: getTSForDay(params.time),
     n: params.body,
-    txt: label + (if params.text then ' - ' + params.text else ''),
+    txt: label,
     isst: 1,
-    p: (if params.lastSide == 'left' then 1 else 2) + ';' + (+params.left || 0) + ';' + (+params.right || 0),
     listKid: -1
   })
-exports.logNurse = logNurse
+exports.logSolids = logSolids
 
 # params: child, time, type, quantity
 logSupplement = (params) =>
@@ -142,6 +163,28 @@ logSupplement = (params) =>
   })
 exports.logSupplement = logSupplement
 
+# params: child, time, body
+logPotty = (params) =>
+  db = new sqlite3.Database(DB_FILE)
+  p = q.defer()
+  label = params.child.name + ': Potty'
+  db.run('INSERT INTO data (startTime, endTime, activity, label, notes) VALUES (?, ?, ?, ?, ?)',
+    [params.time.toDate(), params.time.toDate(), 'Potty', label, params.body], () =>
+      db.close()
+      p.resolve(logStatus({
+        Kid: params.child.id,
+        C: 2500,
+        fmt: 'long',
+        txt: label,
+        n: params.body,
+        uts: params.time.format('HHmm'),
+        ptm: params.time.format('HHmm'),
+        pdt: params.time.format('YYMMDD'),
+        listKid: -1
+      })))
+  p.promise
+exports.logPotty = logPotty
+
 # params: child, type (BM | wet), time, text (optional), body,
 # openAir
 #
@@ -161,18 +204,25 @@ logDiaper = (params) =>
     options += '1,,'
   else
     options += '0,,'
-  logStatus({
-    Kid: params.child.id,
-    C: typeCode,
-    fmt: 'long',
-    txt: params.child.name + ' had a ' + (params.text || (params.type + ' diaper')) + (if params.body then ' ' + params.body else ''),
-    n: params.body,
-    uts: params.time.format('HHmm'),
-    ptm: params.time.format('HHmm'),
-    pdt: params.time.format('YYMMDD'),
-    p: options,
-    listKid: -1
-  })
+  db = new sqlite3.Database(DB_FILE)
+  p = q.defer()
+  label = params.child.name + ' had a ' + (params.text || (params.type + ' diaper')) + (if params.body then ' ' + params.body else '')
+  db.run('INSERT INTO data (startTime, endTime, activity, label, notes) VALUES (?, ?, ?, ?, ?)',
+    [params.time.toDate(), params.time.toDate(), 'Diaper', label, params.body], () =>
+      db.close()
+      p.resolve(logStatus({
+        Kid: params.child.id,
+        C: typeCode,
+        fmt: 'long',
+        txt: label,
+        n: params.body,
+        uts: params.time.format('HHmm'),
+        ptm: params.time.format('HHmm'),
+        pdt: params.time.format('YYMMDD'),
+        p: options,
+        listKid: -1
+      })))
+  p.promise
 exports.logDiaper = logDiaper
 
 # params: child, time, title, body
@@ -240,17 +290,24 @@ logWeight = (params) =>
     n: params.body,
     listKid: -1
   }
-  logStatus(formData)
+  db = new sqlite3.Database(DB_FILE)
+  p = q.defer()
+  db.run('INSERT INTO data (startTime, endTime, activity, quantity, label, notes) VALUES (?, ?, ?, ?, ?, ?)',
+    [params.time.toDate(), params.endTime.toDate(), 'Weight', params.weight, params.text || params.body, params.body], () =>
+      db.close()
+      p.resolve(logStatus(formData))
+  )
+  p.promise
 exports.logWeight = logWeight
 
 # params: childID, time, endTime (optional)
 logSleep = (params) =>
   p = q.defer()
+  label = params.text
   formData = {
     Kid: params.child.id,
     C: 501,
     fmt: 'long'
-    txt: params.text,
     p: '0,0,,', # options
     listKid: -1
   }
@@ -270,15 +327,29 @@ logSleep = (params) =>
       formData.uts = params.time.format('HHmm')
       formData.ptm = params.time.format('HHmm')
       formData.pdt = params.time.format('YYMMDD')
+      label ||= (if params.child then params.child.name + ' ' else '') + ' starts sleeping'
+      params.activity = 'Sleep Start'
     if params.endTime
       formData.d = params.endTime.diff(params.time, 'minutes')
       formData.e = params.endTime.format('M/DD/YYYY HH:mm')
       formData.ptm = params.endTime.format('HHmm')
-      formData.txt = (if params.child then params.child.name + ' ' else '') + 'stops sleeping (' + formData.d + 'min)'
-    logStatus(formData)
+      label ||= (if params.child then params.child.name + ' ' else '') + 'stops sleeping (' + formData.d + 'min)'
+      params.activity = 'Sleep'
+    formData.txt = label
+    db = new sqlite3.Database(DB_FILE)
+    p2 = q.defer()
+    db.run('INSERT INTO data (startTime, endTime, activity, duration, label, notes) VALUES (?, ?, ?, ?, ?, ?)',
+      [params.time.toDate(),
+       if params.endTime then params.endTime.toDate() else null,
+       params.activity,
+       formData.d || 0,
+       formData.txt || '', params.body], () =>
+        db.close()
+        p2.resolve(logStatus(formData))
+    )
+    p2.promise
   )
 exports.logSleep = logSleep
-
   
 logQuantifiedMeasurement = (params) =>
   categoryID = config.quantified.measurements[params.category] || params.category || params.categoryID
@@ -333,6 +404,34 @@ cacheDataFromFile = () =>
   data = csv.fromPath DATA_FILE, {headers: true}
   q(cacheData(data))
 
+getLogs = (params) =>
+  # Open SQLite database
+  db = new sqlite3.Database(DB_FILE)
+  p = q.defer()
+  threshold = null
+  query = 'SELECT time, text, parsed FROM logs WHERE 1=1'
+  queryParams = {}
+  if params.days
+    query += ' AND time >= $date'
+    queryParams.$date = moment().subtract(+params.days, 'days').toDate()
+  if params.start
+    query += ' AND time >= $start'
+    queryParams.$start = moment(params.start).toDate()
+  if params.end
+    query += ' AND time <= $end'
+    queryParams.$end = moment(params.end).toDate()
+  query += ' ORDER BY time DESC'
+  db.all(query, queryParams, (err, records) =>
+    if err
+      console.log err
+    csv.writeToString(records, {headers: true}, (err, data) =>
+      p.resolve(data)
+    )
+  )
+  p.promise
+exports.getLogs = getLogs
+
+  
 # params: activity
 convertToCSV = (params) =>
   # Open SQLite database
@@ -354,7 +453,6 @@ convertToCSV = (params) =>
     query += ' AND startTime <= $end'
     queryParams.$end = moment(params.end).toDate()
   query += ' ORDER BY startTime DESC'
-  console.log query, queryParams
   db.all(query, queryParams, (err, records) =>
     if err
       console.log err
@@ -481,31 +579,35 @@ parseCommand = (s, params) ->
   # Try to parse duration or end time
   # Other commands
   if s.match /cache file/
-    params.function = cacheDataFromFile
+    _.assign(params, {function: cacheDataFromFile, command: 'cache'})
   else if s.match /save/
     if matches = s.match /save ({.*)/
-      _.assign(params, {value: JSON.parse(matches[1])})
+      _.assign(params, {value: JSON.parse(matches[1]), command: 'save'})
     else if matches = s.match /save (.*)/
       _.assign(params, {value: {body: matches[1]}})
-    _.assign(params, {function: saveNote, name: 'note'})
+    _.assign(params, {function: saveNote, name: 'note', command: 'save'})
   else if s.match /load/
-    _.assign(params, {function: loadNote, name: 'note'})
+    _.assign(params, {function: loadNote, name: 'note', command: 'load'})
   else if s.match /clear/
-    _.assign(params, {function: clearNote, name: 'note'})
-  else if s.match(/wet diaper|pee/)
-    _.assign(params, {function: logDiaper, type: 'wet'})
+    _.assign(params, {function: clearNote, name: 'note', command: 'clear'})
+  else if s.match(/wet diaper/)
+    _.assign(params, {function: logDiaper, type: 'wet', command: 'diaper'})
     if s.match (/open air/)
       params.openAir = true
-  else if s.match(/BM diaper|poo/)
-    _.assign(params, {function: logDiaper, type: 'BM'})
+  else if s.match(/BM diaper/)
+    _.assign(params, {function: logDiaper, type: 'BM', command: 'diaper'})
     if s.match (/open air/)
       params.openAir = true
+  else if s.match /potty/
+    _.assign(params, {function: logPotty, command: 'potty'})
+  else if matches = s.match /\b(ate|refused) (.*)/
+    _.assign(params, {function: logSolids, body: matches[0] + (if params.body then ' ' + params.body else ''), command: 'eat'})
   else if s.match /sleep/
-    _.assign(params, {function: logSleep})
+    _.assign(params, {function: logSleep, command: 'sleep'})
   else if s.match /wake/
-    _.assign(params, {function: logSleep, endTime: params.time, startTime: null, time: null})
+    _.assign(params, {function: logSleep, endTime: params.time, startTime: null, time: null, command: 'wake'})
   else if s.match /update/
-    _.assign(params, {function: update})
+    _.assign(params, {function: update, command: 'update'})
     if s.match /month/
       _.assign(params, {span: 'month'})
     else if s.match /day|yesterday|today/
@@ -518,9 +620,10 @@ parseCommand = (s, params) ->
       weight = +matches[1] * 2.2 * 16
     else if matches = s.match(/([\.0-9]+) ?lbs?( ([\.0-9]+) ?oz)?/)
       weight = +matches[1] * 16 + (+matches[3] || 0)
-    _.assign(params, {function: logWeight, weight: weight, text: s})
+    _.assign(params, {function: logWeight, weight: weight, text: s, command: 'weight'})
   else if s.match /drank/
     params.function = logSupplement
+    params.command = 'drank'
     if matches = s.match(/([.0-9]+) oz/)
       params.quantity = +matches[1]
     if s.match /formula/i
@@ -530,15 +633,18 @@ parseCommand = (s, params) ->
   else if matches = s.match /mood (is|was) (.*)/
     _.assign(params, {
       function: logMood,
-      title: (if params.child then (params.child.name + ' is ') else '') + matches[2]
+      title: (if params.child then (params.child.name + ' is ') else '') + matches[2],
+      command: 'mood'
     })
   else if matches = s.match /(crying|calm|cried|cooing|cooed|smiling|calm|smiled)/
     _.assign(params, {
       function: logMood,
       title: (if params.child then (params.child.name + ' - ') else '') + matches[1]
+      command: 'mood'
     })
   else if s.match /nursed?/
     params.function = logNurse
+    params.command = 'nursed'
     myRegexp = /(left|right) (side )?for ([0-9]+) minutes?/g
     while (matches = myRegexp.exec(s)) != null
       params[matches[1]] = +matches[3]
@@ -569,9 +675,10 @@ parseCommand = (s, params) ->
       params.startTime.subtract((params.left || 0 + params.right || 0), 'minutes')
       params.time = params.startTime
   else if s.match /summary/
+    params.command = 'summary'
     params.function = getBabyConnectSummary
   else if matches = s.match(/activity/)
-    _.assign(params, {function: logActivity})
+    _.assign(params, {function: logActivity, command: 'activity'})
   if params.duration and !params.endTime
     params.endTime = params.startTime.clone().add(params.duration, 'minutes')
   if params.endTime and !params.duration

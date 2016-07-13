@@ -2,7 +2,6 @@ express = require 'express'
 router = express.Router()
 sqlite3 = require('sqlite3').verbose()
 babyconnect = require './baby-connect'
-sketches = require './serve-sketches'
 config = require(require('home-dir')() + '/.secret')
 moment = require 'moment'
 q = require 'q'
@@ -11,17 +10,25 @@ babyConnectProcessor = (req, res) =>
   s = if req.body && req.body.s then req.body.s else req.query.s
   params = {child: config.babyConnect.kids.main, user: req.user}
   babyconnect.parseCommand(s, params)
-  if params.function
-    q(params.function(params)).then((data) =>
-      res.send data
-    )
-  else
-    res.send 'Unknown command: ' + s
+  db = new sqlite3.Database(DB_FILE)
+  db.run('INSERT INTO log (time, text, parsed) VALUES (?, ?, ?)',
+    [new Date(), s, JSON.stringify(params)], () =>
+      db.close()
+      if params.function
+        q(params.function(params)).then((data) =>
+          res.send data
+        )
+      else
+        res.send 'Unknown command: ' + s
+      )
 
 router.all '/s', (req, res) =>
   babyConnectProcessor(req, res)
+router.all '/logs', (req, res) =>
+  babyconnect.getLogs(req.query).then (data) =>
+    res.send(data)
 router.get '/babyconnect/data.csv', (req, res) =>
-  babyconnect.convertToCSV().then (data) =>
+  babyconnect.convertToCSV(req.query).then (data) =>
     res.send(data)
 router.post '/babyconnect/update', (req, res) =>
   child = config.babyConnect.kids.main
@@ -29,6 +36,4 @@ router.post '/babyconnect/update', (req, res) =>
     res.sendStatus(200)
 
 
-sketchesServer = sketches.setupServer('/api/sketches')
-router.use '/sketches', sketchesServer
 module.exports = router

@@ -1,2 +1,2 @@
 #!/bin/bash
-xrandr --output LVDS-0 --brightness 0.3
+xrandr --output LVDS1 --brightness 0.3

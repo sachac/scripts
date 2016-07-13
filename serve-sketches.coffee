@@ -69,7 +69,7 @@ links = """
 header = _.template("""
 <style type="text/css">body { font-family: Arial, sans-serif; }
 ul li { margin-bottom: 0.5em }
-.links { font-size: large; margin-top: 1em; margin-bottom: 1em; clear: both }</style>
+.links { font-size: x-large; margin-top: 1em; margin-bottom: 1em; clear: both }</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
   <script src="https://npmcdn.com/imagesloaded@4.1/imagesloaded.pkgd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/masonry/4.0.0/masonry.pkgd.min.js"></script>
@@ -83,23 +83,23 @@ ul li { margin-bottom: 0.5em }
   </script>
   """ + links)
 footer = _.template(links)
-masonry = "<script>$('.grid').imagesLoaded(function() { $('.grid').masonry({itemSelector: '.grid-item'}); })</script>"
+masonry = "" # "<script>$('.grid').imagesLoaded(function() { $('.grid').masonry({itemSelector: '.grid-item'}); })</script>"
 
-linkTags = (filename) ->
+linkTags = (filename, req) ->
   filename = filename.replace(/#([-a-zA-Z]+)/g, (x, tag) ->
-    return '<a href="/tag/' + tag + '">' + x + '</a>'
+    return '<a href="' + req.app.locals.base + '/tag/' + tag + '">' + x + '</a>'
   )
   filename = filename.replace(/ref .*/, (x) ->
     return x.replace(/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9][a-z]?/, (y) ->
-      return '<a href="/id/' + y + '">' + y + '</a>'
+      return '<a href="' + req.app.locals.base + '/id/' + y + '">' + y + '</a>'
     )
   )
   return filename
     
-linkToImage = (base, filename, optionalURL) ->
+linkToImage = (base, filename, optionalURL, req) ->
   url = base + '/image/' + encodeURIComponent(filename)
   s = '<div class="grid-item" data-filename="' + filename + '"><a href="' + (optionalURL || url) + '"><img src="' + url + '" width="100%"></a>'
-  s += '<br />' + linkTags(filename) + '<br /><a href="#" class="followup">Follow up</a></div>'
+  s += '<br />' + linkTags(filename, req) + '<br />'
   return s
   
 serveRandomImage = (req, res) ->
@@ -121,7 +121,7 @@ showTextList = (req, res, filter) ->
     list = sketches.filter(filter)
     res.send header(req.app.locals.templateVars) + '<ul>' + list.map((filename) ->
       url = req.app.locals.base + '/image/' + encodeURIComponent(filename)
-      return '<li><a href="' + url + '">View</a> - ' + linkTags(filename) + '</li>'
+      return '<li><a href="' + url + '">View</a> - ' + linkTags(filename, req) + '</li>'
     ).join('') + '</ul>' + footer(req.app.locals.templateVars)
 exports.showTextList = showTextList
   
@@ -140,7 +140,11 @@ exports.listJournalSketches = listJournalSketches
 serveImageByID = (req, res) ->
   getSketches(SKETCH_DIR).then (sketches) ->
     filename = getSketchByID(sketches, req.params.id)
-    res.send header(req.app.locals.templateVars) + linkToImage(req.app.path(), req.filename) + footer(req.app.locals.templateVars)
+    if filename
+      s = header(req.app.locals.templateVars) + linkToImage(req.app.locals.base, filename, null, req) + footer(req.app.locals.templateVars)
+      res.send s
+    else
+      res.send 404
 exports.serveImageByID = serveImageByID
 
 serveImageByName = (req, res) ->
@@ -148,9 +152,9 @@ serveImageByName = (req, res) ->
   res.sendFile filename
 exports.serveImageByName = serveImageByName
 
-formatList = (req, list, urlFunc, size = '50%') ->
-  return '<style type="text/css">.grid-item { width: ' + size + '; float: left; margin-bottom: 1em }</style><div class="grid">' + (list.map((s, index) ->
-    html = linkToImage(req.app.locals.base, s, (if urlFunc then urlFunc(s) else null))
+formatList = (req, list, urlFunc, size = '100%') ->
+  return '<style type="text/css">@media screen and (max-device-width: 720px) { .grid-item { width: 100% } } .grid-item { width: ' + size + '; float: left; margin-bottom: 1em }</style><div class="grid">' + (list.map((s, index) ->
+    html = linkToImage(req.app.locals.base, s, (if urlFunc then urlFunc(s) else null), req)
     if ((size == "33%" && index % 3 == 2) || (size == "50%" && index % 2 == 1))
       html += '<br clear="both" />'
     return html
@@ -183,7 +187,7 @@ serveTagList = (req, res) ->
         return 1 if a[0] > b[0]
         return 0
     res.send header(req.app.locals.templateVars) + '<ul>' + tags.map((tagInfo) ->
-      return '<li><a href="/tag/' + tagInfo[0] + '">' + tagInfo[0] + ' (' + tagInfo[1] + ')</a></li>'
+      return '<li><a href="' + req.app.locals.base + '/tag/' + tagInfo[0] + '">' + tagInfo[0] + ' (' + tagInfo[1] + ')</a></li>'
     ).join('') + '</ul>' + footer(req.app.locals.templateVars)
 exports.serveTagList = serveTagList
 

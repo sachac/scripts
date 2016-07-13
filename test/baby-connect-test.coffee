@@ -12,6 +12,8 @@ time = new Date('2016-01-01 12:00 PM EST')
 tk.freeze(time)
 
 describe 'getRelativeTime', ->
+  it 'should understand yesterday', ->
+    bc.getRelativeTime('yesterday').format('YYYY-MM-DD').should.equal('2015-12-31')
   it 'should understand last week', ->
     bc.getRelativeTime('last week').format('YYYY-MM-DD').should.equal('2015-12-26')
   it 'should understand 1 week ago', ->
@@ -77,6 +79,10 @@ describe 'parseCommand', ->
       p.should.have.property('title').that.matches(/crying/)
       p.startTime.format('HH:mm').should.equal('11:55')
   describe 'nurse', ->
+    it 'should allow side to be optional', ->
+      p = bc.parseCommand('nursed from 12:00 to 12:10', {})
+      p.should.have.property('left', 5)
+      p.should.have.property('right', 5)
     it 'should understand which side', ->
       p = bc.parseCommand('nursed left side for 10 minutes', {})
       p.should.have.property('left', 10)
@@ -108,6 +114,11 @@ describe 'parseCommand', ->
       p = bc.parseCommand('nursed left side for 10 minutes ending 2016-02-01 14:00', {})
       p.startTime.format('HH:mm').should.equal('13:50')
       p.endTime.format('HH:mm').should.equal('14:00')
+    it 'should understand time span', ->
+      p = bc.parseCommand('nursed left side from 12:10 to 12:20', {})
+      p.startTime.format('HH:mm').should.equal('12:10')
+      p.endTime.format('HH:mm').should.equal('12:20')
+      p.should.have.property('left', 10)
   describe 'update month', ->
     it 'should understand last month', ->
       p = bc.parseCommand('update last month', {})
@@ -116,36 +127,62 @@ describe 'parseCommand', ->
     it 'should understand last week', ->
       p = bc.parseCommand('update last week', {})
       p.time.format('YYYY-MM-DD').should.equal('2015-12-26')
+      p.should.have.property('span', 'week')
+  describe 'update day', ->
+    it 'should understand yesterday', ->
+      p = bc.parseCommand('update yesterday', {})
+      p.time.format('YYYY-MM-DD').should.equal('2015-12-31')
+    it 'should understand today', ->
+      p = bc.parseCommand('update today', {})
+      p.time.format('YYYY-MM-DD').should.equal('2016-01-01')
+    it 'should understand specified date', ->
+      p = bc.parseCommand('update date 2015-06-06', {})
+      p.time.format('YYYY-MM-DD').should.equal('2015-06-06')
+  describe 'log potty', ->
+    it 'should use the right function', ->
+      p = bc.parseCommand('potty note Pee, Pad, Read, Accompanied', {})
+      p.should.have.property('function', bc.logPotty)
+    it 'should capture note', ->
+      p = bc.parseCommand('potty note Pee, Pad, Read, Accompanied', {})
+      p.should.have.property('body').that.matches(/Pee, Pad, Read, Accompanied/)
+  describe 'log solids', ->
+    it 'should use the right function', ->
+      p = bc.parseCommand('ate 2 tsp of sweet potato', {})
+      p.should.have.property('function', bc.logSolids)
+    it 'should capture notes', ->
+      p = bc.parseCommand('ate 2 tsp of sweet potato', {})
+      p.should.have.property('body').that.matches(/sweet potato/)
+      p.should.have.property('body').that.matches(/2 tsp/)
   describe 'log supplement', ->
     it 'should use the right function', ->
-      p = bc.parseCommand('drank 0.25 oz of milk', {})
+      p = bc.parseCommand('drank 0.25 oz of Milk', {})
       p.should.have.property('function', bc.logSupplement)
     it 'should capture quantity', ->
-      p = bc.parseCommand('drank 0.25 oz of milk', {})
+      p = bc.parseCommand('drank 0.25 oz of Milk', {})
       p.should.have.property('quantity', 0.25)
-      p = bc.parseCommand('drank 0.50 oz of milk', {})
+      p = bc.parseCommand('drank 0.50 oz of Milk', {})
       p.should.have.property('quantity', 0.5)
     it 'should capture type', ->
-      p = bc.parseCommand('drank 0.25 oz of milk', {})
-      p.should.have.property('type', 'milk')
-      p = bc.parseCommand('drank 0.25 oz of formula', {})
-      p.should.have.property('type', 'formula')
+      p = bc.parseCommand('drank 0.25 oz of Milk', {})
+      p.should.have.property('type', 'Milk')
+      p = bc.parseCommand('drank 0.25 oz of Formula', {})
+      p.should.have.property('type', 'Formula')
     it 'should capture notes', ->
-      p = bc.parseCommand('drank 0.25 oz of milk note eyedropper', {})
+      p = bc.parseCommand('drank 0.25 oz of Milk note eyedropper', {})
       p.should.have.property('body').that.matches(/eyedropper/)
     it 'should capture duration', ->
-      p = bc.parseCommand('drank 0.25 oz of milk over 10 minutes', {})
+      p = bc.parseCommand('drank 0.25 oz of Milk over 10 minutes', {})
       p.should.have.property('duration', 10)
     it 'should understand start and end times', ->
-      p = bc.parseCommand('drank 0.25 oz of milk from 9:00 to 9:30', {})
+      p = bc.parseCommand('drank 0.25 oz of Milk from 9:00 to 9:30', {})
       p.should.have.property('duration', 30)
       p.startTime.format('H:mm').should.equal('9:00')
       p.endTime.format('H:mm').should.equal('9:30')
   describe 'log diaper', ->
     it 'should understand relative times', ->
-      p = bc.parseCommand('peed 5 minutes ago', {})
+      p = bc.parseCommand('wet diaper 5 minutes ago', {})
       p.time.format('HH:mm').should.equal('11:55')
-      p = bc.parseCommand('pooed 10 minutes ago', {})
+      p = bc.parseCommand('BM diaper 10 minutes ago', {})
       p.time.format('HH:mm').should.equal('11:50')
     it 'should handle open air', ->
       p = bc.parseCommand('wet diaper open air', {})
@@ -156,12 +193,6 @@ describe 'parseCommand', ->
       p = bc.parseCommand('wet diaper', {})
       p.should.have.property('function', bc.logDiaper)
       p.should.have.property('type', 'wet')
-      p = bc.parseCommand('pee', {})
-      p.should.have.property('function', bc.logDiaper)
-      p.should.have.property('type', 'wet')
-      p = bc.parseCommand('poo', {})
-      p.should.have.property('function', bc.logDiaper)
-      p.should.have.property('type', 'BM')
       p = bc.parseCommand('BM diaper', {})
       p.should.have.property('function', bc.logDiaper)
       p.should.have.property('type', 'BM')
@@ -170,5 +201,24 @@ describe 'parseCommand', ->
       p.should.have.property('function', bc.logDiaper)
       p.should.have.property('type', 'BM')
       p.should.have.property('body').that.matches(/changed to disposable/)
-
-
+  describe 'log weight', ->
+    it 'should set the function', ->
+      p = bc.parseCommand('weighed 4.47 kg note pre-feed home', {})
+      p.should.have.property('function', bc.logWeight)
+    it 'should capture notes', ->
+      p = bc.parseCommand('weighed 4.47 kg note pre-feed home', {})
+      p.should.have.property('body').that.matches(/pre-feed home/)
+    it 'should convert kg', ->
+      p = bc.parseCommand('weighed 4.47 kg note pre-feed home', {})
+      p.should.have.property('weight').closeTo(157.39, 0.1)
+    it 'should convert lb and oz', ->
+      p = bc.parseCommand('weighed 9 lbs 13 oz', {})
+      p.should.have.property('weight').closeTo(157, 0.1)
+    it 'should convert lb', ->
+      p = bc.parseCommand('weighed 10 lbs', {})
+      p.should.have.property('weight').closeTo(160, 0.1)
+      
+      
+      
+      
+      
