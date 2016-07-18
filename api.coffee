@@ -5,6 +5,7 @@ babyconnect = require './baby-connect'
 config = require(require('home-dir')() + '/.secret')
 moment = require 'moment'
 q = require 'q'
+DB_FILE = '/home/sacha/Dropbox/apps/babyconnect.db'
 
 babyConnectProcessor = (req, res) =>
   s = if req.body && req.body.s then req.body.s else req.query.s

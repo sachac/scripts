@@ -312,14 +312,16 @@ logSleep = (params) =>
     listKid: -1
   }
   if params.endTime
+    formData.C = 500
+    formData.isst = 1
     if !params.time  # woke up
       # retrieve it from summary.dtOfLastSleeping
       getBabyConnectSummary({child: params.child, time: params.endTime}).then((data) =>
         params.time = moment(data.summary.timeOfLastSleeping, 'M/DD/YYYY HH:mm')
         p.resolve(formData)
       )
-    formData.C = 500
-    formData.isst = 1
+    else
+      p.resolve(formData)
   else
     p.resolve(formData)
   p.promise.then((formData) =>
@@ -327,23 +329,24 @@ logSleep = (params) =>
       formData.uts = params.time.format('HHmm')
       formData.ptm = params.time.format('HHmm')
       formData.pdt = params.time.format('YYMMDD')
-      label ||= (if params.child then params.child.name + ' ' else '') + ' starts sleeping'
+      label = (if params.child then params.child.name + ' ' else '') + ' starts sleeping'
       params.activity = 'Sleep Start'
     if params.endTime
       formData.d = params.endTime.diff(params.time, 'minutes')
       formData.e = params.endTime.format('M/DD/YYYY HH:mm')
       formData.ptm = params.endTime.format('HHmm')
-      label ||= (if params.child then params.child.name + ' ' else '') + 'stops sleeping (' + formData.d + 'min)'
+      label = (if params.child then params.child.name + ' ' else '') + 'stops sleeping (' + formData.d + 'min)'
       params.activity = 'Sleep'
     formData.txt = label
     db = new sqlite3.Database(DB_FILE)
     p2 = q.defer()
-    db.run('INSERT INTO data (startTime, endTime, activity, duration, label, notes) VALUES (?, ?, ?, ?, ?, ?)',
-      [params.time.toDate(),
+    data = [params.time.toDate(),
        if params.endTime then params.endTime.toDate() else null,
        params.activity,
        formData.d || 0,
-       formData.txt || '', params.body], () =>
+       formData.txt || '', params.body]
+    db.run('INSERT INTO data (startTime, endTime, activity, duration, label, notes) VALUES (?, ?, ?, ?, ?, ?)',
+      data, () =>
         db.close()
         p2.resolve(logStatus(formData))
     )
@@ -582,7 +585,7 @@ parseCommand = (s, params) ->
     _.assign(params, {function: cacheDataFromFile, command: 'cache'})
   else if s.match /save/
     if matches = s.match /save ({.*)/
-      _.assign(params, {value: JSON.parse(matches[1]), command: 'save'})
+      _.assign(params, {value: JSON.parse(matches[1])})
     else if matches = s.match /save (.*)/
       _.assign(params, {value: {body: matches[1]}})
     _.assign(params, {function: saveNote, name: 'note', command: 'save'})
@@ -602,7 +605,7 @@ parseCommand = (s, params) ->
     _.assign(params, {function: logPotty, command: 'potty'})
   else if matches = s.match /\b(ate|refused) (.*)/
     _.assign(params, {function: logSolids, body: matches[0] + (if params.body then ' ' + params.body else ''), command: 'eat'})
-  else if s.match /sleep/
+  else if s.match /sleep|slept/
     _.assign(params, {function: logSleep, command: 'sleep'})
   else if s.match /wake/
     _.assign(params, {function: logSleep, endTime: params.time, startTime: null, time: null, command: 'wake'})

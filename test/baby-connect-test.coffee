@@ -217,8 +217,12 @@ describe 'parseCommand', ->
     it 'should convert lb', ->
       p = bc.parseCommand('weighed 10 lbs', {})
       p.should.have.property('weight').closeTo(160, 0.1)
-      
-      
-      
-      
-      
+  describe 'log sleep', ->
+    it 'should set the function', ->
+      p = bc.parseCommand('slept from 14:00 to 14:30', {})
+      p.should.have.property('function', bc.logSleep)
+    it 'should get the start and end time', ->
+      p = bc.parseCommand('slept from 14:00 to 14:30', {})
+      p.time.format('HH:mm').should.equal('14:00')
+      p.endTime.format('HH:mm').should.equal('14:30')
+    
