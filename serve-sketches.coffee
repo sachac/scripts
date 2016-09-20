@@ -71,7 +71,7 @@ header = _.template("""
 ul li { margin-bottom: 0.5em }
 .links { font-size: x-large; margin-top: 1em; margin-bottom: 1em; clear: both }</style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.0/jquery.min.js"></script>
-  <script src="https://npmcdn.com/imagesloaded@4.1/imagesloaded.pkgd.min.js"></script>
+  <script src="https://unpkg.com/imagesloaded@4.1/imagesloaded.pkgd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/masonry/4.0.0/masonry.pkgd.min.js"></script>
   <script>
     $(document).ready(function() {
