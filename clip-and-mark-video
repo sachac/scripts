@@ -1,0 +1,17 @@
+#!/bin/bash
+# Clip and label the middle of a video and put it in the clipped/ directory
+
+selection_duration=3
+
+duration=$(printf "%.0f" $(ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$1"))
+
+# start in the middle
+middle=$(expr \( $duration - $selection_duration \) / 2)
+ss=$(($middle > $selection_duration / 2 ? $middle : 0))
+ffmpeg -y -ss $ss -i "$1" -t $selection_duration -vf drawtext="fontfile=/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf:boxcolor=black@0.5:box=1:text='$1':y=0:x=0:fontsize=30:fontcolor=white" -c:a copy "clipped/$1" 
+
+# resolution check
+# for FILE in *; do echo $FILE $(ffprobe -v error -show_entries stream=height -of default=noprint_wrappers=1:nokey=1 "$FILE"); done
+
+# sample concat command
+# ffmpeg -y -safe 0 -f concat -i <(find . -type f -name '2016*' -printf "file '$PWD/%p'\n" | sort) -c copy output.mp4
