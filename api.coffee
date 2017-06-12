@@ -35,6 +35,17 @@ router.post '/babyconnect/update', (req, res) =>
   child = config.babyConnect.kids.main
   q(babyconnect.update({child: child, span: 'week'})).then () =>
     res.sendStatus(200)
-
+router.get '/videos', (req, res) =>
+  exec = require('child_process').exec
+  cmd = 'node /home/sacha/bin/stalk-library-videos.js /home/sacha/Dropbox/apps/stalk-library-videos.json';
+  csv = require 'fast-csv'
+  exec(cmd, (error, stdout, stderr) =>
+    s = ''
+    table = csv.fromString(stdout)
+    .on('data', (data) =>
+      s += '<tr><td>' + data.join('</td><td>') + '</td></tr>'
+    )
+    .on('end', () => res.send('<table>' + s + '</table>'))
+  )  
 
 module.exports = router
