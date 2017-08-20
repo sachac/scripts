@@ -123,7 +123,7 @@ print "Preparing output image..."
 result, out = cv2.threshold(out, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 # out = cv2.adaptiveThreshold(out, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 101, 2)
 out = cv2.GaussianBlur(out, (3, 3), 0)
-
+out = cv2.cvtColor(out, cv2.COLOR_GRAY2BGR)
 cv2.imwrite(args["output"], out)
 cv2.imshow("image", out)
 #cv2.imshow("image", gray)
