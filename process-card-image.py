@@ -74,6 +74,7 @@ def prepare_grayscale_for_analysis(image):
   image = imutils.resize(image, height = new_height)
   hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
   (hue, saturation, values) = cv2.split(image)
+  
   gray = hue
   #gray = cv2.GaussianBlur(gray, (5, 5), 0)
   gray = cv2.bilateralFilter(gray, 20, 17, 17)

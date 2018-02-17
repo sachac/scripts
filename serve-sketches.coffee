@@ -197,9 +197,11 @@ followUp = (req, res) ->
   require('child_process').exec(command)
   res.status(200)
 exports.followUp = followUp
-  
+
 serveImagesByTag = (req, res) ->
   tag = req.params.tag.split(/,/g)
+  from = req.params.from
+  to = req.params.to
   page = ''
   getSketches(SKETCH_DIR).then (sketches) ->
     q(getSketchesByTags(sketches, tag)).then (list) ->

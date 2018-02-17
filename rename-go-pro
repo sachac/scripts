@@ -3,8 +3,11 @@
 for FILE; do
     if [[ "$FILE" =~ 'JPG' ]]; then
         TIME=$(exiftool "$FILE" | grep "Original" | cut -c 35- | tr ': ' '.')
+    elif [[ "$FILE" =~ 'jpg' ]]; then
+        TIME=$(exiftool "$FILE" | grep "Original" | cut -c 35- | tr ': ' '.')
     else
-        TIME=$(mediainfo "$FILE" | grep "Encoded date" | head -1 | cut -c 48- | tr ": " "." )
+        TIME=$(mediainfo "$FILE" | grep "Encoded date" | head -1 | cut -c 48- | tr ": " ".")
     fi
+    echo "$FILE -> $TIME.${FILE:e}"
     mv -i "$FILE" $TIME.${FILE:e}
 done

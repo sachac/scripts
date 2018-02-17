@@ -6,6 +6,7 @@ rp = require('request-promise')
 q = require 'q'
 csv = require 'fast-csv'
 moment = require 'moment'
+
 cheerio = require('cheerio')
 split = require('split')
 sqlite3 = require('sqlite3').verbose()
@@ -293,7 +294,7 @@ logWeight = (params) =>
   db = new sqlite3.Database(DB_FILE)
   p = q.defer()
   db.run('INSERT INTO data (startTime, endTime, activity, quantity, label, notes) VALUES (?, ?, ?, ?, ?, ?)',
-    [params.time.toDate(), params.time.toDate(), 'Weight', params.weight, params.text || params.body, params.body], () =>
+    [params.time.toDate(), params.time.toDate(), 'Weight', params.weight / 16, params.text || params.body, params.body], () =>
       db.close()
       p.resolve(logStatus(formData))
   )

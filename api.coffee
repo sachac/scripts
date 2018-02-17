@@ -35,6 +35,7 @@ router.post '/babyconnect/update', (req, res) =>
   child = config.babyConnect.kids.main
   q(babyconnect.update({child: child, span: 'week'})).then () =>
     res.sendStatus(200)
+    
 router.get '/videos', (req, res) =>
   exec = require('child_process').exec
   cmd = 'node /home/sacha/bin/stalk-library-videos.js /home/sacha/Dropbox/apps/stalk-library-videos.json';
@@ -48,4 +49,8 @@ router.get '/videos', (req, res) =>
     .on('end', () => res.send('<table>' + s + '</table>'))
   )  
 
+serveIndex = require('serve-index')
+router.use '/agenda', express.static('/home/sacha/cloud/agenda'), serveIndex('/home/sacha/cloud/agenda', {'icons': true})
+  
+  
 module.exports = router
